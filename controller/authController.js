@@ -18,11 +18,9 @@ const registerOrLogin = async (req, res) => {
     let owner = await Owner.findOne({ ownerNumber });
 
     if (owner) {
-      // Check if hostel exists for this owner
-      const hostel = await Hostel.findOne({ ownerId: owner._id });
-      const isExisted = !!hostel;
+      const hostels = await Hostel.find({ ownerId: owner._id });
+      const isExisted = hostels.length > 0;
 
-      // Update isExisted based on hostel presence
       owner = await Owner.findByIdAndUpdate(
         owner._id,
         { isExisted },
@@ -30,14 +28,14 @@ const registerOrLogin = async (req, res) => {
       );
 
       const token = generateToken(owner._id);
-      return res.status(200).json({ token, isExisted, owner });
+      return res.status(200).json({ token, isExisted, owner, hostels });
     }
 
-    // New registration — no hostel yet so isExisted is false
+    // New registration — no hostel yet
     owner = await Owner.create({ ownerNumber, isExisted: false });
 
     const token = generateToken(owner._id);
-    return res.status(201).json({ token, isExisted: false, owner });
+    return res.status(201).json({ token, isExisted: false, owner, hostels: [] });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
