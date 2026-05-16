@@ -80,7 +80,7 @@ When a tenant is deleted, all associated payment records are also deleted (casca
 
 ## 5. API Endpoints
 
-> All endpoints require `Authorization: Bearer <token>` header.
+> All endpoints require `Authorization: Bearer <token>` header...
 
 ---
 
