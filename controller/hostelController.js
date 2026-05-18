@@ -10,12 +10,6 @@ const createHostel = async (req, res) => {
       return res.status(400).json({ message: 'hostelName, hostelType and ownerName are required' });
     }
 
-    // Check if hostel already exists for this owner
-    const existing = await Hostel.findOne({ ownerId: req.owner._id });
-    if (existing) {
-      return res.status(400).json({ message: 'Hostel already exists for this owner' });
-    }
-
     const hostel = await Hostel.create({
       ownerId: req.owner._id,
       ownerNumber: req.owner.ownerNumber,
@@ -33,6 +27,7 @@ const createHostel = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // GET /api/hostel/list
 const getHostelsByOwner = async (req, res) => {
