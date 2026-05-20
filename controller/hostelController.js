@@ -1,7 +1,107 @@
 const Hostel = require('../models/Hostel');
 const Owner = require('../models/Owner');
+const Tenant = require('../models/Tenant');
+const Room = require('../models/Room');
+const Payment = require('../models/Payment');
 
-// POST /api/hostel/create
+// helper — build analytics for a list of hostelIds
+const buildAnalytics = async (hostelIds) => {
+  const now = new Date();
+
+  // today's date range (midnight → midnight)
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd   = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  // current month range
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const [payments, tenants, rooms] = await Promise.all([
+    Payment.find({ hostelId: { $in: hostelIds } }).lean(),
+    Tenant.find({ hostelId: { $in: hostelIds } }, 'hostelId monthlyFee').lean(),
+    Room.find({ hostelId: { $in: hostelIds } }, 'hostelId vacantBeds totalBeds occupiedBeds').lean(),
+  ]);
+
+  const calcStats = (filteredPayments, filteredTenants, filteredRooms) => {
+    const todayCollection = filteredPayments
+      .filter(p => p.isPaid && p.paymentDate >= todayStart && p.paymentDate < todayEnd)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const monthlyCollection = filteredPayments
+      .filter(p => p.isPaid && p.paymentDate >= monthStart && p.paymentDate < monthEnd)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const totalDues = filteredPayments
+      .filter(p => !p.isPaid)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const vacantBeds = filteredRooms.reduce((sum, r) => sum + (r.vacantBeds || 0), 0);
+    const totalBeds  = filteredRooms.reduce((sum, r) => sum + (r.totalBeds || 0), 0);
+    const occupiedBeds = filteredRooms.reduce((sum, r) => sum + (r.occupiedBeds || 0), 0);
+
+    // paid tenants = tenants who have at least one paid payment this month
+    const paidTenantIds = new Set(
+      filteredPayments
+        .filter(p => p.isPaid && p.paymentDate >= monthStart && p.paymentDate < monthEnd)
+        .map(p => p.tenantId.toString())
+    );
+    const allTenantIds = new Set(filteredTenants.map(t => t._id.toString()));
+    const paidTenants   = paidTenantIds.size;
+    const unpaidTenants = allTenantIds.size - paidTenantIds.size;
+
+    return {
+      todayCollection,
+      monthlyCollection,
+      totalDues,
+      totalTenants: filteredTenants.length,
+      vacantBeds,
+      totalBeds,
+      occupiedBeds,
+      paidTenants,
+      unpaidTenants,
+    };
+  };
+
+  return { payments, tenants, rooms, calcStats };
+};
+
+// GET /api/hostel/analytics
+const getOwnerAnalytics = async (req, res) => {
+  try {
+    const hostels = await Hostel.find({ ownerId: req.owner._id }).lean();
+    if (!hostels.length) {
+      return res.status(200).json({ overall: {}, hostels: [] });
+    }
+
+    const hostelIds = hostels.map(h => h._id);
+    const { payments, tenants, rooms, calcStats } = await buildAnalytics(hostelIds);
+
+    // overall stats across all hostels
+    const overall = calcStats(payments, tenants, rooms);
+
+    // per-hostel breakdown
+    const hostelBreakdown = hostels.map(hostel => {
+      const hid = hostel._id.toString();
+      const hPayments = payments.filter(p => p.hostelId.toString() === hid);
+      const hTenants  = tenants.filter(t => t.hostelId.toString() === hid);
+      const hRooms    = rooms.filter(r => r.hostelId.toString() === hid);
+      const stats     = calcStats(hPayments, hTenants, hRooms);
+
+      return {
+        hostelId:   hostel._id,
+        hostelName: hostel.hostelName,
+        hostelType: hostel.hostelType,
+        ...stats,
+      };
+    });
+
+    res.status(200).json({ overall, hostels: hostelBreakdown });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
 const createHostel = async (req, res) => {
   try {
     const { hostelName, hostelType, ownerName, email } = req.body;
@@ -99,4 +199,4 @@ const getHostelById = async (req, res) => {
   }
 };
 
-module.exports = { createHostel, getHostelsByOwner, getHostelById, deleteHostel, updateHostel };
+module.exports = { createHostel, getHostelsByOwner, getHostelById, deleteHostel, updateHostel, getOwnerAnalytics };

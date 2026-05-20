@@ -98,4 +98,17 @@ const approveTenant = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-module.exports = { generateFormToken, submitTenantForm, deleteTemporaryTenant, approveTenant };
+const getTemporaryTenantsByHostel = async (req, res) => {
+  try {
+    const { hostelId } = req.params;
+    const hostel = await Hostel.findOne({ _id: hostelId, ownerId: req.owner._id });
+    if (!hostel) return res.status(403).json({ message: "Unauthorized or hostel not found" });
+    const tenants = await TemporaryTenant.find({ hostelId })
+      .populate("floorId", "floorNumber floorName")
+      .populate("roomId", "roomNumber roomName")
+      .sort({ createdAt: -1 });
+    res.status(200).json({ hostelId, total: tenants.length, tenants });
+  } catch (error) { res.status(500).json({ message: error.message }); }
+};
+
+module.exports = { generateFormToken, submitTenantForm, deleteTemporaryTenant, approveTenant, getTemporaryTenantsByHostel };

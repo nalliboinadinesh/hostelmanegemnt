@@ -18,8 +18,9 @@
 9. [Tenant API](#9-tenant-api)
 10. [Expense API](#10-expense-api)
 11. [Payment API](#11-payment-api)
-12. [Cron Jobs](#12-cron-jobs)
-13. [Error Reference](#13-error-reference)
+12. [Temporary Tenant API](#12-temporary-tenant-api)
+13. [Cron Jobs](#13-cron-jobs)
+14. [Error Reference](#14-error-reference)
 
 ---
 
@@ -289,6 +290,76 @@ No body required.
   ]
 }
 ```
+
+---
+
+### Get Owner Analytics
+**GET** `/api/hostel/analytics`
+
+Returns a full analytics summary for the authenticated owner — overall across all hostels, plus a per-hostel breakdown.
+
+**Overall fields:**
+
+| Field | Description |
+|-------|-------------|
+| `todayCollection` | Sum of payments marked paid with `paymentDate` = today |
+| `monthlyCollection` | Sum of payments marked paid with `paymentDate` in current month |
+| `totalDues` | Sum of all unpaid payment amounts |
+| `totalTenants` | Total active tenants across all hostels |
+| `vacantBeds` | Total vacant beds across all rooms |
+| `totalBeds` | Total beds across all rooms |
+| `occupiedBeds` | Total occupied beds across all rooms |
+| `paidTenants` | Tenants with at least one paid payment this month |
+| `unpaidTenants` | Tenants with no paid payment this month |
+
+**Response `200`:**
+```json
+{
+  "overall": {
+    "todayCollection": 8000,
+    "monthlyCollection": 45000,
+    "totalDues": 20000,
+    "totalTenants": 18,
+    "vacantBeds": 6,
+    "totalBeds": 24,
+    "occupiedBeds": 18,
+    "paidTenants": 12,
+    "unpaidTenants": 6
+  },
+  "hostels": [
+    {
+      "hostelId": "664b2a...",
+      "hostelName": "Green Valley Hostel",
+      "hostelType": "boys",
+      "todayCollection": 5000,
+      "monthlyCollection": 28000,
+      "totalDues": 12000,
+      "totalTenants": 10,
+      "vacantBeds": 2,
+      "totalBeds": 12,
+      "occupiedBeds": 10,
+      "paidTenants": 7,
+      "unpaidTenants": 3
+    },
+    {
+      "hostelId": "664b3c...",
+      "hostelName": "Blue Ridge Hostel",
+      "hostelType": "girls",
+      "todayCollection": 3000,
+      "monthlyCollection": 17000,
+      "totalDues": 8000,
+      "totalTenants": 8,
+      "vacantBeds": 4,
+      "totalBeds": 12,
+      "occupiedBeds": 8,
+      "paidTenants": 5,
+      "unpaidTenants": 3
+    }
+  ]
+}
+```
+
+> `paidTenants` and `unpaidTenants` are based on whether the tenant has a payment with `isPaid: true` and `paymentDate` falling in the current calendar month.
 
 ---
 
@@ -1006,7 +1077,211 @@ All fields optional.
 
 ---
 
-## 12. Cron Jobs
+## 12. Temporary Tenant API
+
+Temporary tenants are pending applicants who submitted a form via a time-limited token link. Owners review and either approve (converts to a full tenant) or delete them.
+
+**Base path:** `/api/temporary-tenant`
+
+---
+
+### Generate Form Token
+**POST** `/api/temporary-tenant/generate-token`
+
+No auth required. Generates a 15-minute JWT that must be passed when submitting the tenant form.
+
+**Request Body:**
+```json
+{ "hostelId": "664b2a..." }
+```
+
+**Response `200`:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "hostelId": "664b2a...",
+  "issuedAt": "2026-05-20T10:00:00.000Z",
+  "expiresAt": "2026-05-20T10:15:00.000Z",
+  "expiresInMinutes": 15
+}
+```
+
+**Errors:**
+```json
+{ "message": "hostelId is required" }   // 400
+{ "message": "Hostel not found" }       // 404
+```
+
+---
+
+### Submit Tenant Form
+**POST** `/api/temporary-tenant/submit`
+
+No owner auth required. Uses the form token from `generate-token` as the Bearer token.
+
+**Headers:**
+```
+Authorization: Bearer <form-token>
+```
+
+**Request Body:**
+```json
+{
+  "floorId": "664c3b...",
+  "roomId": "664d4c...",
+  "name": "John Doe",
+  "phoneNumber": "9876543210",
+  "email": "john@example.com",
+  "address": "123 Main St, Chennai",
+  "parentNumber": "9876500000",
+  "aadhaarNumber": "1234-5678-9012",
+  "occupation": "Student",
+  "joinedDate": "2026-06-01",
+  "monthlyFee": 5000,
+  "deposit": 10000
+}
+```
+
+**Required fields:** `floorId`, `roomId`, `name`, `phoneNumber`
+
+**Response `201`:**
+```json
+{
+  "message": "Form submitted successfully",
+  "temporaryTenant": {
+    "_id": "665b7f...",
+    "hostelId": "664b2a...",
+    "floorId": "664c3b...",
+    "roomId": "664d4c...",
+    "name": "John Doe",
+    "phoneNumber": "9876543210",
+    "email": "john@example.com",
+    "address": "123 Main St, Chennai",
+    "parentNumber": "9876500000",
+    "aadhaarNumber": "1234-5678-9012",
+    "occupation": "Student",
+    "joinedDate": "2026-06-01T00:00:00.000Z",
+    "monthlyFee": 5000,
+    "deposit": 10000,
+    "paymentStatus": "pending",
+    "feeStatus": [ { "month": 5, "year": 2026, "isPaid": false } ],
+    "createdAt": "2026-05-20T10:05:00.000Z",
+    "updatedAt": "2026-05-20T10:05:00.000Z"
+  }
+}
+```
+
+**Errors:**
+```json
+{ "message": "Form token is required" }                          // 401
+{ "message": "Form link has expired. Please request a new one." } // 401
+{ "message": "Invalid form token" }                              // 401
+{ "message": "floorId, roomId, name and phoneNumber are required" } // 400
+{ "message": "No vacant beds available in this room" }           // 400
+{ "message": "Room not found in this hostel/floor" }             // 404
+```
+
+---
+
+### Get Temporary Tenants by Hostel
+**GET** `/api/temporary-tenant/hostel/:hostelId`
+
+> Requires `Authorization: Bearer <owner-token>`
+
+Returns all pending temporary tenants for the given hostel. Only accessible by the hostel owner.
+
+**Response `200`:**
+```json
+{
+  "hostelId": "664b2a...",
+  "total": 2,
+  "tenants": [
+    {
+      "_id": "665b7f...",
+      "name": "John Doe",
+      "phoneNumber": "9876543210",
+      "email": "john@example.com",
+      "occupation": "Student",
+      "joinedDate": "2026-06-01T00:00:00.000Z",
+      "monthlyFee": 5000,
+      "deposit": 10000,
+      "paymentStatus": "pending",
+      "floorId": { "_id": "664c3b...", "floorNumber": 1, "floorName": "Ground Floor" },
+      "roomId": { "_id": "664d4c...", "roomNumber": "101", "roomName": "Room A" },
+      "createdAt": "2026-05-20T10:05:00.000Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+```json
+{ "message": "Unauthorized or hostel not found" }  // 403
+```
+
+---
+
+### Approve Temporary Tenant
+**POST** `/api/temporary-tenant/approve/:tempTenantId`
+
+> Requires `Authorization: Bearer <owner-token>`
+
+Converts the temporary tenant into a full tenant. Also:
+- Increments room `occupiedBeds`, decrements `vacantBeds`
+- Auto-generates 30-day payment cycles from `joinedDate` to today
+- Deletes the temporary tenant record
+
+**Response `201`:**
+```json
+{
+  "message": "Tenant approved and moved to tenants successfully",
+  "tenant": {
+    "_id": "664e5d...",
+    "hostelId": "664b2a...",
+    "floorId": "664c3b...",
+    "roomId": "664d4c...",
+    "name": "John Doe",
+    "phoneNumber": "9876543210",
+    "paymentStatus": "pending",
+    "feeStatus": [ { "month": 5, "year": 2026, "isPaid": false } ],
+    "createdAt": "2026-05-20T10:10:00.000Z"
+  }
+}
+```
+
+**Errors:**
+```json
+{ "message": "Temporary tenant not found" }        // 404
+{ "message": "Room not found" }                    // 404
+{ "message": "No vacant beds available in this room" } // 400
+{ "message": "Unauthorized" }                      // 403
+```
+
+---
+
+### Delete Temporary Tenant
+**DELETE** `/api/temporary-tenant/:tempTenantId`
+
+> Requires `Authorization: Bearer <owner-token>`
+
+Rejects and removes the temporary tenant record without creating a full tenant.
+
+**Response `200`:**
+```json
+{ "message": "Temporary tenant deleted successfully" }
+```
+
+**Errors:**
+```json
+{ "message": "Temporary tenant not found" }  // 404
+{ "message": "Unauthorized" }                // 403
+```
+
+---
+
+## 13. Cron Jobs
+
+## 13. Cron Jobs
 
 ### Monthly Fee Reset & Payment Cycle Generator
 
@@ -1023,7 +1298,7 @@ All fields optional.
 
 ---
 
-## 13. Error Reference
+## 14. Error Reference
 
 | Status | Meaning |
 |--------|---------|
@@ -1044,13 +1319,14 @@ All fields optional.
 
 ---
 
-## 14. API Quick Reference
+## 15. API Quick Reference
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/api/auth/register-login` | No | Register or login |
 | POST | `/api/hostel/create` | Yes | Create hostel |
 | GET | `/api/hostel/list` | Yes | List owner's hostels |
+| GET | `/api/hostel/analytics` | Yes | Owner analytics (overall + per-hostel) |
 | GET | `/api/hostel/:hostelId` | Yes | Get hostel by ID |
 | PUT | `/api/hostel/:hostelId` | Yes | Update hostel |
 | DELETE | `/api/hostel/:hostelId` | Yes | Delete hostel |
@@ -1078,4 +1354,9 @@ All fields optional.
 | GET | `/api/payment/:tenantId` | Yes | Get payment cycles for tenant |
 | GET | `/api/payment/hostel/:hostelId` | Yes | Get all payments for hostel |
 | PUT | `/api/payment/:paymentId` | Yes | Mark payment paid/unpaid |
+| POST | `/api/temporary-tenant/generate-token` | No | Generate 15-min form token |
+| POST | `/api/temporary-tenant/submit` | Form token | Submit tenant application form |
+| GET | `/api/temporary-tenant/hostel/:hostelId` | Yes | List temporary tenants by hostel |
+| POST | `/api/temporary-tenant/approve/:tempTenantId` | Yes | Approve & convert to full tenant |
+| DELETE | `/api/temporary-tenant/:tempTenantId` | Yes | Reject & delete temporary tenant |
 | GET | `/health` | No | Server health check |
