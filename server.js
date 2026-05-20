@@ -1,6 +1,5 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const cors = require('cors');
 const connectDB = require('./config/db');
 const startFeeStatusCron = require('./cron/feeStatusCron');
 const startHealthCheckCron = require('./cron/healthCheckCron');
@@ -8,13 +7,6 @@ const startHealthCheckCron = require('./cron/healthCheckCron');
 dotenv.config();
 
 const app = express();
-
-// Allow requests from any frontend origin
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
 
 app.use(express.json());
 
@@ -26,7 +18,6 @@ app.use('/api/tenant', require('./routes/tenantRoutes'));
 app.use('/api/expense', require('./routes/expenseRoutes'));
 app.use('/api/payment', require('./routes/paymentRoutes'));
 app.use('/api/temporary-tenant', require('./routes/temporaryTenantRoutes'));
-app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 
 connectDB().then(() => {
   startFeeStatusCron();
