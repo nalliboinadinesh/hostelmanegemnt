@@ -37,6 +37,7 @@ const getPaymentsByTenant = async (req, res) => {
         amount: p.amount,
         isPaid: p.isPaid,
         paymentMethod: p.paymentMethod,
+        paymentDate: p.paymentDate,
         note: p.note,
       })),
     };
@@ -75,6 +76,9 @@ const getPaymentsByHostel = async (req, res) => {
             periodEnd: p.periodEnd,
             amount: p.amount,
             isPaid: p.isPaid,
+            paymentMethod: p.paymentMethod,
+            paymentDate: p.paymentDate,
+            note: p.note,
           })),
         };
       })
@@ -87,10 +91,9 @@ const getPaymentsByHostel = async (req, res) => {
 };
 
 // PUT /api/payment/:paymentId
-// Update only isPaid, paymentMethod, note
 const updatePayment = async (req, res) => {
   try {
-    const { isPaid, paymentMethod, note } = req.body;
+    const { isPaid, paymentMethod, paymentDate, amount, note } = req.body;
 
     const payment = await Payment.findById(req.params.paymentId);
     if (!payment) {
@@ -104,6 +107,8 @@ const updatePayment = async (req, res) => {
 
     if (isPaid !== undefined) payment.isPaid = isPaid;
     if (paymentMethod) payment.paymentMethod = paymentMethod;
+    if (paymentDate) payment.paymentDate = new Date(paymentDate);
+    if (amount !== undefined) payment.amount = amount;
     if (note) payment.note = note;
 
     await payment.save();

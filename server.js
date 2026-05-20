@@ -2,6 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const startFeeStatusCron = require('./cron/feeStatusCron');
+const startHealthCheckCron = require('./cron/healthCheckCron');
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.use('/api/temporary-tenant', require('./routes/temporaryTenantRoutes'));
 
 connectDB().then(() => {
   startFeeStatusCron();
+  startHealthCheckCron();
   app.listen(process.env.PORT, () => {
     console.log(`server is running in the port ${process.env.PORT}`);
   });

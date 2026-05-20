@@ -7,6 +7,7 @@ const paymentSchema = new mongoose.Schema({
   periodStart: { type: Date, required: true },  // start of 30-day cycle
   periodEnd: { type: Date, required: true },     // periodStart + 30 days
   paymentMethod: { type: String },
+  paymentDate: { type: Date },
   note: { type: String },
   isPaid: { type: Boolean, default: false },
 }, { timestamps: true, collection: 'payments' });
