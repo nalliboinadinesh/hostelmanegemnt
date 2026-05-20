@@ -15,7 +15,7 @@ const generateFormToken = async (req, res) => {
     const issuedAt = new Date();
     const expiresAt = new Date(issuedAt.getTime() + expiresInSeconds * 1000);
     const token = jwt.sign({ hostelId }, process.env.JWT_SECRET, { expiresIn: expiresInSeconds });
-    res.status(200).json({ token, issuedAt, expiresAt, expiresInMinutes: 15 });
+    res.status(200).json({ token, hostelId, issuedAt, expiresAt, expiresInMinutes: 15 });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
