@@ -1,6 +1,8 @@
 const Room = require('../models/Room');
 const Hostel = require('../models/Hostel');
 const Floor = require('../models/Floor');
+const Tenant = require('../models/Tenant');
+const Payment = require('../models/Payment');
 
 const verifyHostelOwner = async (hostelId, ownerId) => {
   return await Hostel.findOne({ _id: hostelId, ownerId });
@@ -150,8 +152,16 @@ const deleteRoom = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
+    // Cascade: delete all tenants in this room + their payments
+    const tenants = await Tenant.find({ roomId: room._id });
+    const tenantIds = tenants.map(t => t._id);
+    if (tenantIds.length > 0) {
+      await Payment.deleteMany({ tenantId: { $in: tenantIds } });
+      await Tenant.deleteMany({ _id: { $in: tenantIds } });
+    }
+
     await room.deleteOne();
-    res.status(200).json({ message: 'Room deleted successfully' });
+    res.status(200).json({ message: 'Room and associated tenants deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

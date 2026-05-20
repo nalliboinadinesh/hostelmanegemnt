@@ -2,29 +2,31 @@ const cron = require('node-cron');
 const Tenant = require('../models/Tenant');
 const Payment = require('../models/Payment');
 
-// Runs at 00:00 on the 1st of every month
 const startFeeStatusCron = () => {
-  cron.schedule('0 0 1 * *', async () => {
+
+  // Runs daily at 00:00 — generates next payment cycle for tenants whose current cycle ends today
+  cron.schedule('0 0 * * *', async () => {
     try {
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      // 1. Reset feeStatus for all tenants
-      await Tenant.updateMany(
-        { feeStatus: { $not: { $elemMatch: { month, year } } } },
-        { $push: { feeStatus: { month, year, isPaid: false } } }
-      );
-      console.log(`[CRON] Fee status reset for ${month}/${year}`);
+      const tenants = await Tenant.find({
+        joinedDate: { $exists: true },
+        monthlyFee: { $exists: true, $gt: 0 },
+      });
 
-      // 2. Generate next payment cycle for each tenant
-      const tenants = await Tenant.find({ joinedDate: { $exists: true }, monthlyFee: { $exists: true } });
+      let generated = 0;
 
       for (const tenant of tenants) {
-        // Find the latest payment cycle for this tenant
+        // Find the latest cycle for this tenant
         const lastPayment = await Payment.findOne({ tenantId: tenant._id }).sort({ periodEnd: -1 });
+        if (!lastPayment) continue;
 
-        if (lastPayment) {
+        const periodEnd = new Date(lastPayment.periodEnd);
+        periodEnd.setHours(0, 0, 0, 0);
+
+        // Only generate if the last cycle ends today or earlier
+        if (periodEnd <= today) {
           const nextStart = new Date(lastPayment.periodEnd);
           const nextEnd = new Date(nextStart);
           nextEnd.setDate(nextEnd.getDate() + 30);
@@ -40,17 +42,29 @@ const startFeeStatusCron = () => {
               periodEnd: nextEnd,
               isPaid: false,
             });
+            generated++;
           }
         }
       }
 
-      console.log(`[CRON] Payment cycles generated for ${month}/${year}`);
+      if (generated > 0) {
+        console.log(`[CRON] Generated ${generated} new payment cycle(s) on ${today.toDateString()}`);
+      }
+
+      // Update feeStatus for current month/year for all tenants
+      const month = today.getMonth() + 1;
+      const year = today.getFullYear();
+      await Tenant.updateMany(
+        { feeStatus: { $not: { $elemMatch: { month, year } } } },
+        { $push: { feeStatus: { month, year, isPaid: false } } }
+      );
+
     } catch (error) {
-      console.error('[CRON] Cron job failed:', error.message);
+      console.error('[CRON] Daily cron job failed:', error.message);
     }
   });
 
-  console.log('[CRON] Fee status cron job scheduled');
+  console.log('[CRON] Daily payment cycle cron job scheduled');
 };
 
 module.exports = startFeeStatusCron;

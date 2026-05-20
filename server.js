@@ -16,6 +16,7 @@ app.use('/api/room', require('./routes/roomRoutes'));
 app.use('/api/tenant', require('./routes/tenantRoutes'));
 app.use('/api/expense', require('./routes/expenseRoutes'));
 app.use('/api/payment', require('./routes/paymentRoutes'));
+app.use('/api/temporary-tenant', require('./routes/temporaryTenantRoutes'));
 
 connectDB().then(() => {
   startFeeStatusCron();
