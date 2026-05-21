@@ -1,8 +1,13 @@
 const Hostel = require('../models/Hostel');
 const Owner = require('../models/Owner');
-const Tenant = require('../models/Tenant');
+const Floor = require('../models/Floor');
 const Room = require('../models/Room');
+const Tenant = require('../models/Tenant');
 const Payment = require('../models/Payment');
+const Expense = require('../models/Expense');
+const Announcement = require('../models/Announcement');
+const Complaint = require('../models/Complaint');
+const TemporaryTenant = require('../models/TemporaryTenant');
 
 // helper — build analytics for a list of hostelIds
 const buildAnalytics = async (hostelIds) => {
@@ -148,13 +153,27 @@ const deleteHostel = async (req, res) => {
       return res.status(404).json({ message: 'Hostel not found or unauthorized' });
     }
 
+    const hostelId = hostel._id;
+
+    // cascade delete everything tied to this hostel
+    await Promise.all([
+      Floor.deleteMany({ hostelId }),
+      Room.deleteMany({ hostelId }),
+      Tenant.deleteMany({ hostelId }),
+      Payment.deleteMany({ hostelId }),
+      Expense.deleteMany({ hostelId }),
+      Announcement.deleteMany({ hostelId }),
+      Complaint.deleteMany({ hostelId }),
+      TemporaryTenant.deleteMany({ hostelId }),
+    ]);
+
     await hostel.deleteOne();
 
-    // Check if owner has any remaining hostels, update isExisted accordingly
+    // update owner.isExisted if no hostels remain
     const remaining = await Hostel.countDocuments({ ownerId: req.owner._id });
     await Owner.findByIdAndUpdate(req.owner._id, { isExisted: remaining > 0 });
 
-    res.status(200).json({ message: 'Hostel deleted successfully' });
+    res.status(200).json({ message: 'Hostel and all related data deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

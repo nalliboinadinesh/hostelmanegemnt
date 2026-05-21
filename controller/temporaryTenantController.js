@@ -33,18 +33,38 @@ const submitTenantForm = async (req, res) => {
       return res.status(401).json({ message: "Invalid form token" });
     }
     const { hostelId } = decoded;
-    const { floorId, roomId, name, phoneNumber, email, address, parentNumber, aadhaarNumber, occupation, joinedDate, monthlyFee, deposit } = req.body;
-    if (!floorId || !roomId || !name || !phoneNumber)
-      return res.status(400).json({ message: "floorId, roomId, name and phoneNumber are required" });
-    const room = await Room.findOne({ _id: roomId, hostelId, floorId });
-    if (!room) return res.status(404).json({ message: "Room not found in this hostel/floor" });
+
+    const {
+      floorNumber, roomNumber,
+      name, phoneNumber, email, address, parentNumber,
+      aadhaarNumber, occupation, joinedDate, monthlyFee, deposit,
+    } = req.body;
+
+    if (!floorNumber || !roomNumber || !name || !phoneNumber)
+      return res.status(400).json({ message: "floorNumber, roomNumber, name and phoneNumber are required" });
+
+    // resolve floorNumber → floorId
+    const Floor = require("../models/Floor");
+    const floor = await Floor.findOne({ hostelId, floorNumber: Number(floorNumber) });
+    if (!floor) return res.status(404).json({ message: `Floor ${floorNumber} not found in this hostel` });
+
+    // resolve roomNumber → roomId (scoped to hostel + floor)
+    const room = await Room.findOne({ hostelId, floorId: floor._id, roomNumber: String(roomNumber) });
+    if (!room) return res.status(404).json({ message: `Room ${roomNumber} not found on floor ${floorNumber}` });
+
     if (room.vacantBeds <= 0) return res.status(400).json({ message: "No vacant beds available in this room" });
+
     const now = new Date();
     const temporaryTenant = await TemporaryTenant.create({
-      hostelId, floorId, roomId, name, phoneNumber, email, address, parentNumber,
-      aadhaarNumber, occupation, joinedDate, monthlyFee, deposit, paymentStatus: "pending",
+      hostelId,
+      floorId: floor._id,
+      roomId: room._id,
+      name, phoneNumber, email, address, parentNumber,
+      aadhaarNumber, occupation, joinedDate, monthlyFee, deposit,
+      paymentStatus: "pending",
       feeStatus: [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }],
     });
+
     res.status(201).json({ message: "Form submitted successfully", temporaryTenant });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };

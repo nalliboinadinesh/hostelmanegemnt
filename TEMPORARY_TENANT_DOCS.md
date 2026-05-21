@@ -96,6 +96,8 @@ No authorization required. Owner calls this to generate a shareable 15-minute to
 
 No owner authorization required. Tenant submits their details using the form token generated in step 1.
 
+The form accepts human-readable `floorNumber` and `roomNumber` instead of ObjectIds. The backend resolves them to the correct ObjectIds internally before saving.
+
 **Headers:**
 ```
 Authorization: Bearer <form_token_from_generate_token>
@@ -104,8 +106,8 @@ Authorization: Bearer <form_token_from_generate_token>
 **Request Body:**
 ```json
 {
-  "floorId": "6a08811d6b1b1a0a032d8ef4",
-  "roomId": "6a08a90f382298f4c1a2ba0a",
+  "floorNumber": 1,
+  "roomNumber": "101",
   "name": "John Doe",
   "phoneNumber": "9876543210",
   "email": "john@example.com",
@@ -119,7 +121,9 @@ Authorization: Bearer <form_token_from_generate_token>
 }
 ```
 
-**Required fields:** `floorId`, `roomId`, `name`, `phoneNumber`
+**Required fields:** `floorNumber`, `roomNumber`, `name`, `phoneNumber`
+
+> `floorNumber` and `roomNumber` are the display values (e.g. floor 1, room 101). The backend looks them up against the hostel embedded in the form token and resolves them to ObjectIds before saving.
 
 **Response `201`:**
 ```json
@@ -154,17 +158,69 @@ Authorization: Bearer <form_token_from_generate_token>
 
 | Status | Response |
 |--------|----------|
-| `400` | `{ "message": "floorId, roomId, name and phoneNumber are required" }` |
+| `400` | `{ "message": "floorNumber, roomNumber, name and phoneNumber are required" }` |
 | `400` | `{ "message": "No vacant beds available in this room" }` |
 | `401` | `{ "message": "Form token is required" }` |
 | `401` | `{ "message": "Form link has expired. Please request a new one." }` |
 | `401` | `{ "message": "Invalid form token" }` |
-| `404` | `{ "message": "Room not found in this hostel/floor" }` |
+| `404` | `{ "message": "Floor {floorNumber} not found in this hostel" }` |
+| `404` | `{ "message": "Room {roomNumber} not found on floor {floorNumber}" }` |
 | `500` | `{ "message": "Internal server error" }` |
 
 ---
 
-### 3. Approve Tenant
+### 3. Get Temporary Tenants by Hostel
+
+**GET** `/api/temporary-tenant/hostel/:hostelId`
+
+Owner authorization required. Returns all pending temporary tenant submissions for a specific hostel, sorted newest first.
+
+**Headers:**
+```
+Authorization: Bearer <owner_jwt_token>
+```
+
+**URL Params:**
+- `hostelId` — the `_id` of the hostel
+
+**Response `200`:**
+```json
+{
+  "hostelId": "6a086fb4f1e4c3bcfa2c37e1",
+  "total": 2,
+  "tenants": [
+    {
+      "_id": "6a0b24bda7a54af8243684ce",
+      "hostelId": "6a086fb4f1e4c3bcfa2c37e1",
+      "floorId": { "_id": "6a08811d6b1b1a0a032d8ef4", "floorNumber": 1 },
+      "roomId": { "_id": "6a08a90f382298f4c1a2ba0a", "roomNumber": "101" },
+      "name": "John Doe",
+      "phoneNumber": "9876543210",
+      "email": "john@example.com",
+      "occupation": "Student",
+      "joinedDate": "2026-05-01T00:00:00.000Z",
+      "monthlyFee": 5000,
+      "deposit": 10000,
+      "paymentStatus": "pending",
+      "feeStatus": [{ "month": 5, "year": 2026, "isPaid": false }],
+      "createdAt": "2026-05-21T05:36:52.166Z",
+      "updatedAt": "2026-05-21T05:36:52.166Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+
+| Status | Response |
+|--------|----------|
+| `401` | `{ "message": "No token, authorization denied" }` |
+| `403` | `{ "message": "Unauthorized or hostel not found" }` |
+| `500` | `{ "message": "Internal server error" }` |
+
+---
+
+### 4. Approve Tenant
 
 **POST** `/api/temporary-tenant/approve/:tempTenantId`
 
@@ -226,7 +282,7 @@ Authorization: Bearer <owner_jwt_token>
 
 ---
 
-### 4. Delete Temporary Tenant
+### 5. Delete Temporary Tenant
 
 **DELETE** `/api/temporary-tenant/:tempTenantId`
 
@@ -265,6 +321,7 @@ Authorization: Bearer <owner_jwt_token>
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/api/temporary-tenant/generate-token` | None | Generate 15-min form token |
-| POST | `/api/temporary-tenant/submit` | Form token | Tenant submits form |
+| POST | `/api/temporary-tenant/submit` | Form token | Tenant submits form (floorNumber + roomNumber) |
+| GET | `/api/temporary-tenant/hostel/:hostelId` | Owner token | List all pending submissions for a hostel |
 | POST | `/api/temporary-tenant/approve/:tempTenantId` | Owner token | Approve and move to tenants |
 | DELETE | `/api/temporary-tenant/:tempTenantId` | Owner token | Reject and delete |
