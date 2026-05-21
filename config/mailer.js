@@ -1,17 +1,15 @@
 const nodemailer = require('nodemailer');
 
-// Created lazily so env vars are always loaded after dotenv.config()
+// Brevo SMTP relay — no IP restrictions, works on Render
 const getTransporter = () => nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // STARTTLS — not blocked by Render or any cloud provider
+  host: process.env.MAIL_HOST || 'smtp-relay.brevo.com',
+  port: parseInt(process.env.MAIL_PORT) || 587,
+  secure: false,
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
+    user: process.env.MAIL_USER,  // ac1201001@smtp-brevo.com
+    pass: process.env.MAIL_PASS,  // xsmtpsib-...
   },
 });
-
-const SENDER_NAME = 'Hostel Management';
 
 /**
  * Send a payment reminder email to a tenant.
@@ -60,8 +58,7 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
           </td>
         </tr>
         <tr>
-          <td align="center"
-              style="background:#f3f4f6;padding:18px;font-size:13px;color:#666;">
+          <td align="center" style="background:#f3f4f6;padding:18px;font-size:13px;color:#666;">
             &copy; ${new Date().getFullYear()} ${hostelName}. All rights reserved.
           </td>
         </tr>
@@ -72,7 +69,7 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
 </html>`;
 
   await getTransporter().sendMail({
-    from: `"${SENDER_NAME}" <${process.env.MAIL_USER}>`,
+    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
     to,
     subject: `Payment Reminder — ₹${amount} due | ${hostelName}`,
     html,
@@ -97,8 +94,6 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
     <tr><td align="center" style="padding:16px 8px;">
       <table width="100%" cellpadding="0" cellspacing="0" border="0"
              style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.08);">
-
-        <!-- Header -->
         <tr>
           <td align="center"
               style="background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:28px 20px;color:#ffffff;">
@@ -107,16 +102,12 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
             <p style="margin:0;font-size:13px;opacity:0.9;">Your tenant dashboard is now ready</p>
           </td>
         </tr>
-
-        <!-- Body -->
         <tr>
           <td style="padding:24px 20px;color:#1e293b;">
             <p style="margin:0 0 6px;font-size:16px;font-weight:bold;color:#0f172a;">Hello ${tenantName},</p>
             <p style="margin:0 0 20px;font-size:13px;line-height:1.7;color:#475569;">
               Your tenant account has been successfully created. Access your dashboard to manage everything in one place.
             </p>
-
-            <!-- Features -->
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td width="40" valign="top" style="padding-bottom:16px;">
@@ -155,15 +146,12 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
                 </td>
               </tr>
             </table>
-
-            <!-- CTA -->
             <div style="text-align:center;margin-top:24px;">
               <a href="${dashboardLink}"
                  style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;text-decoration:none;padding:13px 28px;border-radius:10px;display:inline-block;font-size:14px;font-weight:bold;">
                 Open Tenant Dashboard
               </a>
             </div>
-
             <p style="margin-top:24px;margin-bottom:0;font-size:13px;line-height:1.7;color:#0f172a;">
               Regards,<br>
               <strong>${hostelOwnerName}</strong><br>
@@ -171,15 +159,12 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
             </p>
           </td>
         </tr>
-
-        <!-- Footer -->
         <tr>
           <td align="center"
               style="background:#f8fafc;padding:16px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
             &copy; ${currentYear} ${hostelName}. All rights reserved.
           </td>
         </tr>
-
       </table>
     </td></tr>
   </table>
@@ -187,7 +172,7 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
 </html>`;
 
   await getTransporter().sendMail({
-    from: `"${SENDER_NAME}" <${process.env.MAIL_USER}>`,
+    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
     to,
     subject: `Welcome to ${hostelName} — Your Dashboard is Ready`,
     html,
