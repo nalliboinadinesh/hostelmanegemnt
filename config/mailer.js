@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 
-const transporter = nodemailer.createTransport({
+// Transporter is created lazily so it always picks up env vars after dotenv.config()
+const getTransporter = () => nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.MAIL_USER,
@@ -97,7 +98,130 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
     html,
   };
 
-  await transporter.sendMail(mailOptions);
+  await getTransporter().sendMail(mailOptions);
 };
 
-module.exports = { sendPaymentReminder };
+const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, dashboardLink }) => {
+  const currentYear = new Date().getFullYear();
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tenant Dashboard Access</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td align="center" style="padding:16px 8px;">
+
+        <table width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td align="center"
+                style="background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:28px 20px;color:#ffffff;">
+              <div style="font-size:32px;margin-bottom:10px;">🏨</div>
+              <h1 style="margin:0 0 6px;font-size:22px;font-weight:bold;line-height:1.3;">Welcome to ${hostelName}</h1>
+              <p style="margin:0;font-size:13px;opacity:0.9;">Your tenant dashboard is now ready</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:24px 20px;color:#1e293b;">
+
+              <p style="margin:0 0 6px;font-size:16px;font-weight:bold;color:#0f172a;">Hello ${tenantName},</p>
+              <p style="margin:0 0 20px;font-size:13px;line-height:1.7;color:#475569;">
+                Your tenant account has been successfully created. Access your dashboard to manage everything in one place.
+              </p>
+
+              <!-- Features -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+
+                <tr>
+                  <td width="40" valign="top" style="padding-bottom:16px;">
+                    <div style="width:36px;height:36px;background:#dcfce7;border-radius:8px;text-align:center;line-height:36px;font-size:18px;">📄</div>
+                  </td>
+                  <td style="padding-left:12px;padding-bottom:16px;vertical-align:top;">
+                    <div style="font-size:13px;font-weight:bold;color:#0f172a;">View fee details</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:2px;">Due amount, fee breakdown &amp; upcoming payments.</div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td width="40" valign="top" style="padding-bottom:16px;">
+                    <div style="width:36px;height:36px;background:#fef9c3;border-radius:8px;text-align:center;line-height:36px;font-size:18px;">₹</div>
+                  </td>
+                  <td style="padding-left:12px;padding-bottom:16px;vertical-align:top;">
+                    <div style="font-size:13px;font-weight:bold;color:#0f172a;">Payment history</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:2px;">View all past payments and receipts.</div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td width="40" valign="top" style="padding-bottom:16px;">
+                    <div style="width:36px;height:36px;background:#e0f2fe;border-radius:8px;text-align:center;line-height:36px;font-size:18px;">🛏️</div>
+                  </td>
+                  <td style="padding-left:12px;padding-bottom:16px;vertical-align:top;">
+                    <div style="font-size:13px;font-weight:bold;color:#0f172a;">Room information</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:2px;">Access your room details and related info.</div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td width="40" valign="top" style="padding-bottom:4px;">
+                    <div style="width:36px;height:36px;background:#fce7f3;border-radius:8px;text-align:center;line-height:36px;font-size:18px;">🎫</div>
+                  </td>
+                  <td style="padding-left:12px;padding-bottom:4px;vertical-align:top;">
+                    <div style="font-size:13px;font-weight:bold;color:#0f172a;">Raise a support ticket</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:2px;">Report any issue — maintenance, cleanliness, or anything else — directly from your dashboard.</div>
+                  </td>
+                </tr>
+
+              </table>
+
+              <!-- CTA Button -->
+              <div style="text-align:center;margin-top:24px;">
+                <a href="${dashboardLink}"
+                   style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff;text-decoration:none;padding:13px 28px;border-radius:10px;display:inline-block;font-size:14px;font-weight:bold;">
+                  Open Tenant Dashboard
+                </a>
+              </div>
+
+              <!-- Regards -->
+              <p style="margin-top:24px;margin-bottom:0;font-size:13px;line-height:1.7;color:#0f172a;">
+                Regards,<br>
+                <strong>${hostelOwnerName}</strong><br>
+                <span style="color:#64748b;">${hostelName}</span>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center"
+                style="background:#f8fafc;padding:16px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+              © ${currentYear} ${hostelName}. All rights reserved.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  await getTransporter().sendMail({
+    from: `"${hostelName}" <${process.env.MAIL_USER}>`,
+    to,
+    subject: `Welcome to ${hostelName} — Your Dashboard is Ready`,
+    html,
+  });
+};
+
+module.exports = { sendPaymentReminder, sendWelcomeEmail };

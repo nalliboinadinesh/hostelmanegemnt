@@ -4,6 +4,15 @@ const Tenant = require("../models/Tenant");
 const Hostel = require("../models/Hostel");
 const Room = require("../models/Room");
 const Payment = require("../models/Payment");
+const { sendWelcomeEmail } = require("../config/mailer");
+
+const buildDashboardLink = (hostelId, tenantId) => {
+  const token = jwt.sign(
+    { hostelId: hostelId.toString(), tenantId: tenantId.toString() },
+    process.env.JWT_SECRET
+  );
+  return `http://localhost:3000?token=${token}&hostelId=${hostelId}&tenantId=${tenantId}`;
+};
 
 const generateFormToken = async (req, res) => {
   try {
@@ -115,6 +124,18 @@ const approveTenant = async (req, res) => {
     }
     await temp.deleteOne();
     res.status(201).json({ message: "Tenant approved and moved to tenants successfully", tenant });
+
+    // send welcome email (non-blocking)
+    if (tenant.email) {
+      const dashboardLink = buildDashboardLink(tenant.hostelId, tenant._id);
+      sendWelcomeEmail({
+        to:              tenant.email,
+        tenantName:      tenant.name,
+        hostelName:      hostel.hostelName,
+        hostelOwnerName: hostel.ownerName,
+        dashboardLink,
+      }).catch(err => console.error('[MAIL] Welcome email failed:', err.message));
+    }
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
