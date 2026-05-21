@@ -1,19 +1,46 @@
-const nodemailer = require('nodemailer');
-
-// Brevo SMTP relay — no IP restrictions, works on Render
-const getTransporter = () => nodemailer.createTransport({
-  host: process.env.MAIL_HOST || 'smtp-relay.brevo.com',
-  port: parseInt(process.env.MAIL_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.MAIL_USER,  // ac1201001@smtp-brevo.com
-    pass: process.env.MAIL_PASS,  // xsmtpsib-...
-  },
-});
+const https = require('https');
 
 /**
- * Send a payment reminder email to a tenant.
+ * Brevo Transactional Email REST API over HTTPS (port 443).
+ * Works on Render and all cloud providers — no SMTP port blocking.
  */
+const sendBrevoEmail = ({ to, toName, subject, html }) => {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      sender: { name: 'Hostel Management', email: process.env.MAIL_FROM },
+      to: [{ email: to, name: toName || to }],
+      subject,
+      htmlContent: html,
+    });
+
+    const req = https.request({
+      hostname: 'api.brevo.com',
+      path: '/v3/smtp/email',
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(JSON.parse(data));
+        } else {
+          reject(new Error(`Brevo API ${res.statusCode}: ${data}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+};
+
 const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelName, hostelOwnerName, roomNumber }) => {
   const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -33,27 +60,14 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
         <tr>
           <td style="padding:35px;color:#333333;">
             <h2>Hello ${tenantName},</h2>
-            <p style="font-size:16px;line-height:1.6;">
-              This is a friendly reminder that your hostel fee payment is still pending.
-            </p>
-            <table width="100%" cellpadding="10" cellspacing="0"
-                   style="margin-top:20px;border-collapse:collapse;">
-              <tr style="background:#f3f4f6;">
-                <td><strong>Room Number</strong></td><td>${roomNumber}</td>
-              </tr>
-              <tr>
-                <td><strong>Amount Due</strong></td><td>&#8377;${amount}</td>
-              </tr>
-              <tr style="background:#f3f4f6;">
-                <td><strong>Due Date</strong></td><td>${fmt(periodEnd)}</td>
-              </tr>
-              <tr>
-                <td><strong>Hostel Name</strong></td><td>${hostelName}</td>
-              </tr>
+            <p style="font-size:16px;line-height:1.6;">This is a friendly reminder that your hostel fee payment is still pending.</p>
+            <table width="100%" cellpadding="10" cellspacing="0" style="margin-top:20px;border-collapse:collapse;">
+              <tr style="background:#f3f4f6;"><td><strong>Room Number</strong></td><td>${roomNumber}</td></tr>
+              <tr><td><strong>Amount Due</strong></td><td>&#8377;${amount}</td></tr>
+              <tr style="background:#f3f4f6;"><td><strong>Due Date</strong></td><td>${fmt(periodEnd)}</td></tr>
+              <tr><td><strong>Hostel Name</strong></td><td>${hostelName}</td></tr>
             </table>
-            <p style="margin-top:35px;font-size:14px;color:#666;">
-              Kindly make the payment before the due date to avoid late charges.
-            </p>
+            <p style="margin-top:35px;font-size:14px;color:#666;">Kindly make the payment before the due date to avoid late charges.</p>
             <p style="font-size:15px;">Thank you,<br><strong>${hostelOwnerName}</strong></p>
           </td>
         </tr>
@@ -68,17 +82,9 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
 </body>
 </html>`;
 
-  await getTransporter().sendMail({
-    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
-    to,
-    subject: `Payment Reminder — ₹${amount} due | ${hostelName}`,
-    html,
-  });
+  await sendBrevoEmail({ to, toName: tenantName, subject: `Payment Reminder — ₹${amount} due | ${hostelName}`, html });
 };
 
-/**
- * Send a welcome email when a tenant account is created.
- */
 const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, dashboardLink }) => {
   const currentYear = new Date().getFullYear();
 
@@ -95,8 +101,7 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
       <table width="100%" cellpadding="0" cellspacing="0" border="0"
              style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.08);">
         <tr>
-          <td align="center"
-              style="background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:28px 20px;color:#ffffff;">
+          <td align="center" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:28px 20px;color:#ffffff;">
             <div style="font-size:32px;margin-bottom:10px;">&#127968;</div>
             <h1 style="margin:0 0 6px;font-size:22px;font-weight:bold;line-height:1.3;">Welcome to ${hostelName}</h1>
             <p style="margin:0;font-size:13px;opacity:0.9;">Your tenant dashboard is now ready</p>
@@ -153,15 +158,13 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
               </a>
             </div>
             <p style="margin-top:24px;margin-bottom:0;font-size:13px;line-height:1.7;color:#0f172a;">
-              Regards,<br>
-              <strong>${hostelOwnerName}</strong><br>
+              Regards,<br><strong>${hostelOwnerName}</strong><br>
               <span style="color:#64748b;">${hostelName}</span>
             </p>
           </td>
         </tr>
         <tr>
-          <td align="center"
-              style="background:#f8fafc;padding:16px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+          <td align="center" style="background:#f8fafc;padding:16px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
             &copy; ${currentYear} ${hostelName}. All rights reserved.
           </td>
         </tr>
@@ -171,12 +174,7 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
 </body>
 </html>`;
 
-  await getTransporter().sendMail({
-    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
-    to,
-    subject: `Welcome to ${hostelName} — Your Dashboard is Ready`,
-    html,
-  });
+  await sendBrevoEmail({ to, toName: tenantName, subject: `Welcome to ${hostelName} — Your Dashboard is Ready`, html });
 };
 
 module.exports = { sendPaymentReminder, sendWelcomeEmail };
