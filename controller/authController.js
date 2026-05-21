@@ -24,7 +24,7 @@ const registerOrLogin = async (req, res) => {
       owner = await Owner.findByIdAndUpdate(
         owner._id,
         { isExisted },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       const token = generateToken(owner._id);

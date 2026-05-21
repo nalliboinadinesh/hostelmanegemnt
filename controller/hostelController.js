@@ -125,7 +125,7 @@ const createHostel = async (req, res) => {
     });
 
     // Mark owner as existed since hostel is now created
-    await Owner.findByIdAndUpdate(req.owner._id, { isExisted: true });
+    await Owner.updateOne({ _id: req.owner._id }, { isExisted: true });
 
     res.status(201).json({ message: 'Hostel created successfully', hostel });
   } catch (error) {
@@ -171,7 +171,7 @@ const deleteHostel = async (req, res) => {
 
     // update owner.isExisted if no hostels remain
     const remaining = await Hostel.countDocuments({ ownerId: req.owner._id });
-    await Owner.findByIdAndUpdate(req.owner._id, { isExisted: remaining > 0 });
+    await Owner.updateOne({ _id: req.owner._id }, { isExisted: remaining > 0 });
 
     res.status(200).json({ message: 'Hostel and all related data deleted successfully' });
   } catch (error) {
