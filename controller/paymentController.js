@@ -112,6 +112,32 @@ const updatePayment = async (req, res) => {
     if (note) payment.note = note;
 
     await payment.save();
+
+    // --- Sync feeStatus + paymentStatus on the tenant ---
+    if (isPaid !== undefined) {
+      const tenant = await Tenant.findById(payment.tenantId);
+      if (tenant) {
+        // Derive the month/year this payment cycle belongs to (use periodStart)
+        const cycleMonth = new Date(payment.periodStart).getMonth() + 1;
+        const cycleYear  = new Date(payment.periodStart).getFullYear();
+
+        // Update the matching feeStatus entry, or push one if missing
+        const entry = tenant.feeStatus.find(f => f.month === cycleMonth && f.year === cycleYear);
+        if (entry) {
+          entry.isPaid = payment.isPaid;
+        } else {
+          tenant.feeStatus.push({ month: cycleMonth, year: cycleYear, isPaid: payment.isPaid });
+        }
+
+        // paymentStatus = 'paid' only if every feeStatus entry is paid, else 'pending'
+        tenant.paymentStatus = tenant.feeStatus.every(f => f.isPaid) ? 'paid' : 'pending';
+
+        tenant.markModified('feeStatus');
+        await tenant.save();
+      }
+    }
+    // --- end sync ---
+
     res.status(200).json({ message: 'Payment updated successfully', payment });
   } catch (error) {
     res.status(500).json({ message: error.message });
