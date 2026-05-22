@@ -1,45 +1,15 @@
-const https = require('https');
+const nodemailer = require('nodemailer');
 
-/**
- * Brevo Transactional Email REST API over HTTPS (port 443).
- * Works on Render and all cloud providers — no SMTP port blocking.
- */
-const sendBrevoEmail = ({ to, toName, subject, html }) => {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
-      sender: { name: 'Hostel Management', email: process.env.MAIL_FROM },
-      to: [{ email: to, name: toName || to }],
-      subject,
-      htmlContent: html,
-    });
-
-    const req = https.request({
-      hostname: 'api.brevo.com',
-      path: '/v3/smtp/email',
-      method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'api-key': process.env.BREVO_API_KEY,
-        'content-type': 'application/json',
-        'content-length': Buffer.byteLength(body),
-      },
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(JSON.parse(data));
-        } else {
-          reject(new Error(`Brevo API ${res.statusCode}: ${data}`));
-        }
-      });
-    });
-
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-};
+// Brevo SMTP relay — works on Render (port 587 is allowed via Brevo's relay)
+const getTransporter = () => nodemailer.createTransport({
+  host: process.env.MAIL_HOST || 'smtp-relay.brevo.com',
+  port: parseInt(process.env.MAIL_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.MAIL_USER,  // ac1201001@smtp-brevo.com
+    pass: process.env.MAIL_PASS,  // xsmtpsib-...
+  },
+});
 
 const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelName, hostelOwnerName, roomNumber }) => {
   const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -82,7 +52,12 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
 </body>
 </html>`;
 
-  await sendBrevoEmail({ to, toName: tenantName, subject: `Payment Reminder — ₹${amount} due | ${hostelName}`, html });
+  await getTransporter().sendMail({
+    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
+    to,
+    subject: `Payment Reminder — ₹${amount} due | ${hostelName}`,
+    html,
+  });
 };
 
 const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, dashboardLink }) => {
@@ -174,7 +149,12 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
 </body>
 </html>`;
 
-  await sendBrevoEmail({ to, toName: tenantName, subject: `Welcome to ${hostelName} — Your Dashboard is Ready`, html });
+  await getTransporter().sendMail({
+    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
+    to,
+    subject: `Welcome to ${hostelName} — Your Dashboard is Ready`,
+    html,
+  });
 };
 
 module.exports = { sendPaymentReminder, sendWelcomeEmail };
