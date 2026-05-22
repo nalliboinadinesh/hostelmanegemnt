@@ -63,6 +63,7 @@ No `Authorization` header required. The JWT is passed as a query parameter.
     "hostelName": "Test Hostel",
     "hostelType": "boys",
     "ownerName": "Test Owner",
+    "ownerNumber": "9876543210",
     "email": "owner@example.com"
   },
   "room": {
@@ -115,6 +116,7 @@ No `Authorization` header required. The JWT is passed as a query parameter.
 | `hostelName` | Name of the hostel |
 | `hostelType` | Type (boys / girls / co-living) |
 | `ownerName` | Owner's name |
+| `ownerNumber` | Owner's contact number |
 | `email` | Owner's contact email |
 
 ### `room`

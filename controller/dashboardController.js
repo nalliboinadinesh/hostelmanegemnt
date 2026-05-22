@@ -59,11 +59,12 @@ const getTenantDashboard = async (req, res) => {
         paymentStatus: tenant.paymentStatus,
       },
       hostel: {
-        id:          hostel._id,
-        hostelName:  hostel.hostelName,
-        hostelType:  hostel.hostelType,
-        ownerName:   hostel.ownerName,
-        email:       hostel.email,
+        id:           hostel._id,
+        hostelName:   hostel.hostelName,
+        hostelType:   hostel.hostelType,
+        ownerName:    hostel.ownerName,
+        ownerNumber:  hostel.ownerNumber,
+        email:        hostel.email,
       },
       room: {
         id:         room?._id,
