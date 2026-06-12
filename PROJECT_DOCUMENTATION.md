@@ -1,98 +1,67 @@
-# Hostel Management System — Full API Documentation
+# Hostel Management System — Complete API Documentation
 
-**Base URL:** `http://localhost:4000`
-**Auth:** All protected routes require `Authorization: Bearer <token>` header.
+**Base URL (Local):** `http://localhost:4000`
+**Base URL (Production):** `https://hostelmanegemnt.onrender.com`
 
 ---
 
 ## Table of Contents
 
-1. [Project Overview](#1-project-overview)
-2. [Tech Stack](#2-tech-stack)
-3. [Project Structure](#3-project-structure)
-4. [Database Models](#4-database-models)
-5. [Authentication API](#5-authentication-api)
-6. [Hostel API](#6-hostel-api)
-7. [Floor API](#7-floor-api)
-8. [Room API](#8-room-api)
-9. [Tenant API](#9-tenant-api)
+1. [Tech Stack](#1-tech-stack)
+2. [Authentication](#2-authentication)
+3. [Database Models](#3-database-models)
+4. [Auth API](#4-auth-api)
+5. [Hostel API](#5-hostel-api)
+6. [Floor API](#6-floor-api)
+7. [Room API](#7-room-api)
+8. [Tenant API](#8-tenant-api)
+9. [Temporary Tenant API](#9-temporary-tenant-api)
 10. [Expense API](#10-expense-api)
 11. [Payment API](#11-payment-api)
-12. [Temporary Tenant API](#12-temporary-tenant-api)
-13. [Cron Jobs](#13-cron-jobs)
-14. [Error Reference](#14-error-reference)
+12. [Dashboard API (Tenant-facing)](#12-dashboard-api-tenant-facing)
+13. [Ticket API (Owner-facing)](#13-ticket-api-owner-facing)
+14. [Cron Jobs](#14-cron-jobs)
+15. [Error Reference](#15-error-reference)
+16. [Quick Reference](#16-quick-reference)
 
 ---
 
-## 1. Project Overview
-
-A backend REST API for managing hostels. Owners can register, create hostels, manage floors, rooms, tenants, track expenses, and monitor rent payments on 30-day billing cycles.
-
----
-
-## 2. Tech Stack
+## 1. Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js v20 |
-| Framework | Express.js v4 |
+| Runtime | Node.js v22 |
+| Framework | Express.js v4.22 |
 | Database | MongoDB (Mongoose v9) |
 | Auth | JWT (jsonwebtoken) |
+| Email | Brevo SMTP / REST API |
 | Scheduler | node-cron |
 | Config | dotenv |
+| Deployment | Render |
 
 ---
 
-## 3. Project Structure
+## 2. Authentication
 
+### Owner Auth (protected routes)
+All owner-facing routes require:
 ```
-hostelManagement/
-├── config/
-│   └── db.js               # MongoDB connection
-├── controller/
-│   ├── authController.js
-│   ├── hostelController.js
-│   ├── floorController.js
-│   ├── roomController.js
-│   ├── tenantController.js
-│   ├── expenseController.js
-│   └── paymentController.js
-├── cron/
-│   └── feeStatusCron.js    # Monthly payment cycle generator
-├── middleware/
-│   └── authMiddleware.js   # JWT protect middleware
-├── models/
-│   ├── Owner.js
-│   ├── Hostel.js
-│   ├── Floor.js
-│   ├── Room.js
-│   ├── Tenant.js
-│   ├── Expense.js
-│   └── Payment.js
-├── routes/
-│   ├── authRoutes.js
-│   ├── hostelRoutes.js
-│   ├── floorRoutes.js
-│   ├── roomRoutes.js
-│   ├── tenantRoutes.js
-│   ├── expenseRoutes.js
-│   └── paymentRoutes.js
-├── .env
-├── server.js
-└── package.json
+Authorization: Bearer <owner-jwt>
 ```
+The owner JWT is obtained from `POST /api/auth/register-login`. It expires in **30 days**.
+
+### Dashboard Auth (tenant-facing routes)
+Dashboard routes use a JWT passed in the **request body** as `token`. This JWT is generated when a tenant is created and sent via email/console. It has **no expiry** (permanent access link).
 
 ---
 
-## 4. Database Models
+## 3. Database Models
 
 ### Owner
 | Field | Type | Notes |
 |-------|------|-------|
 | ownerNumber | String | Unique, required |
-| isExisted | Boolean | true if hostel exists |
-| createdAt | Date | Auto |
-| updatedAt | Date | Auto |
+| isExisted | Boolean | true if at least one hostel exists |
 
 ### Hostel
 | Field | Type | Notes |
@@ -102,7 +71,7 @@ hostelManagement/
 | hostelName | String | Required |
 | hostelType | String | Required |
 | ownerName | String | Required |
-| email | String | |
+| email | String | Optional |
 
 ### Floor
 | Field | Type | Notes |
@@ -137,8 +106,11 @@ hostelManagement/
 | joinedDate | Date | |
 | monthlyFee | Number | |
 | deposit | Number | |
-| paymentStatus | String | default: pending |
-| feeStatus | Array | [{month, year, isPaid}] |
+| paymentStatus | String | `paid` / `pending` — auto-synced |
+| feeStatus | Array | `[{month, year, isPaid}]` |
+
+### TemporaryTenant
+Same fields as Tenant. Stored separately until owner approves.
 
 ### Expense
 | Field | Type | Notes |
@@ -159,77 +131,67 @@ hostelManagement/
 | tenantId | ObjectId | Ref: Tenant |
 | amount | Number | Required |
 | periodStart | Date | Cycle start |
-| periodEnd | Date | Cycle end (start + 30 days) |
+| periodEnd | Date | periodStart + 30 days |
 | isPaid | Boolean | default: false |
 | paymentMethod | String | |
+| paymentDate | Date | When marked paid |
 | note | String | |
+
+### Ticket
+| Field | Type | Notes |
+|-------|------|-------|
+| hostelId | ObjectId | Ref: Hostel |
+| tenantId | ObjectId | Ref: Tenant |
+| title | String | Required |
+| category | String | Required |
+| description | String | Required |
+| imageLink | String | Optional, default: null |
+| status | String | `open` / `in-progress` / `resolved` |
 
 ---
 
-## 5. Authentication API
+## 4. Auth API
 
 ### Register / Login
 **POST** `/api/auth/register-login`
 
-No auth header required. If the owner number exists, returns token + `isExisted` based on whether a hostel is linked. If new, creates the owner.
+No auth required. Creates owner if new, returns token if existing.
 
 **Request Body:**
 ```json
-{
-  "ownerNumber": "9876543210"
-}
+{ "ownerNumber": "9876543210" }
 ```
 
-**Response — New Owner `201`:**
+**Response `201` (new owner):**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "eyJ...",
   "isExisted": false,
-  "owner": {
-    "_id": "664a1f...",
-    "ownerNumber": "9876543210",
-    "isExisted": false,
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z"
-  }
+  "owner": { "_id": "...", "ownerNumber": "9876543210", "isExisted": false },
+  "hostels": []
 }
 ```
 
-**Response — Existing Owner with Hostel `200`:**
+**Response `200` (existing owner):**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "eyJ...",
   "isExisted": true,
-  "owner": {
-    "_id": "664a1f...",
-    "ownerNumber": "9876543210",
-    "isExisted": true,
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z"
-  }
-}
-```
-
-**Response — Existing Owner without Hostel `200`:**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "isExisted": false,
-  "owner": { ... }
+  "owner": { "_id": "...", "ownerNumber": "9876543210", "isExisted": true },
+  "hostels": [{ "_id": "...", "hostelName": "Blue Pink", "hostelType": "boys" }]
 }
 ```
 
 **Errors:**
 ```json
-{ "message": "ownerNumber is required" }         // 400
-{ "message": "Internal server error message" }   // 500
+{ "message": "ownerNumber is required" }  // 400
 ```
 
 ---
 
-## 6. Hostel API
+## 5. Hostel API
 
-> All routes require `Authorization: Bearer <token>`
+> All routes require `Authorization: Bearer <owner-token>`
 
 ### Create Hostel
 **POST** `/api/hostel/create`
@@ -244,73 +206,36 @@ No auth header required. If the owner number exists, returns token + `isExisted`
 }
 ```
 
+**Required:** `hostelName`, `hostelType`, `ownerName`
+
 **Response `201`:**
 ```json
 {
   "message": "Hostel created successfully",
   "hostel": {
-    "_id": "664b2a...",
-    "ownerId": "664a1f...",
-    "ownerNumber": "9876543210",
-    "hostelName": "Green Valley Hostel",
-    "hostelType": "boys",
-    "ownerName": "John Doe",
-    "email": "john@example.com",
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z"
+    "_id": "...", "hostelName": "Green Valley Hostel",
+    "hostelType": "boys", "ownerName": "John Doe",
+    "ownerNumber": "9876543210", "ownerId": "..."
   }
 }
 ```
 
-**Errors:**
-```json
-{ "message": "hostelName, hostelType and ownerName are required" }  // 400
-{ "message": "Hostel already exists for this owner" }               // 400
-{ "message": "No token, authorization denied" }                     // 401
-```
-
 ---
 
-### Get All Hostels
+### List Hostels
 **GET** `/api/hostel/list`
-
-No body required.
 
 **Response `200`:**
 ```json
-{
-  "hostels": [
-    {
-      "_id": "664b2a...",
-      "hostelName": "Green Valley Hostel",
-      "hostelType": "boys",
-      "ownerName": "John Doe",
-      "email": "john@example.com"
-    }
-  ]
-}
+{ "hostels": [{ "_id": "...", "hostelName": "Green Valley", "hostelType": "boys" }] }
 ```
 
 ---
 
-### Get Owner Analytics
+### Owner Analytics
 **GET** `/api/hostel/analytics`
 
-Returns a full analytics summary for the authenticated owner — overall across all hostels, plus a per-hostel breakdown.
-
-**Overall fields:**
-
-| Field | Description |
-|-------|-------------|
-| `todayCollection` | Sum of payments marked paid with `paymentDate` = today |
-| `monthlyCollection` | Sum of payments marked paid with `paymentDate` in current month |
-| `totalDues` | Sum of all unpaid payment amounts |
-| `totalTenants` | Total active tenants across all hostels |
-| `vacantBeds` | Total vacant beds across all rooms |
-| `totalBeds` | Total beds across all rooms |
-| `occupiedBeds` | Total occupied beds across all rooms |
-| `paidTenants` | Tenants with at least one paid payment this month |
-| `unpaidTenants` | Tenants with no paid payment this month |
+Returns overall stats + per-hostel breakdown.
 
 **Response `200`:**
 ```json
@@ -328,38 +253,15 @@ Returns a full analytics summary for the authenticated owner — overall across 
   },
   "hostels": [
     {
-      "hostelId": "664b2a...",
-      "hostelName": "Green Valley Hostel",
-      "hostelType": "boys",
-      "todayCollection": 5000,
-      "monthlyCollection": 28000,
-      "totalDues": 12000,
-      "totalTenants": 10,
-      "vacantBeds": 2,
-      "totalBeds": 12,
-      "occupiedBeds": 10,
-      "paidTenants": 7,
-      "unpaidTenants": 3
-    },
-    {
-      "hostelId": "664b3c...",
-      "hostelName": "Blue Ridge Hostel",
-      "hostelType": "girls",
-      "todayCollection": 3000,
-      "monthlyCollection": 17000,
-      "totalDues": 8000,
-      "totalTenants": 8,
-      "vacantBeds": 4,
-      "totalBeds": 12,
-      "occupiedBeds": 8,
-      "paidTenants": 5,
-      "unpaidTenants": 3
+      "hostelId": "...", "hostelName": "Green Valley", "hostelType": "boys",
+      "todayCollection": 5000, "monthlyCollection": 28000,
+      "totalDues": 12000, "totalTenants": 10,
+      "vacantBeds": 2, "totalBeds": 12, "occupiedBeds": 10,
+      "paidTenants": 7, "unpaidTenants": 3
     }
   ]
 }
 ```
-
-> `paidTenants` and `unpaidTenants` are based on whether the tenant has a payment with `isPaid: true` and `paymentDate` falling in the current calendar month.
 
 ---
 
@@ -368,20 +270,7 @@ Returns a full analytics summary for the authenticated owner — overall across 
 
 **Response `200`:**
 ```json
-{
-  "hostel": {
-    "_id": "664b2a...",
-    "hostelName": "Green Valley Hostel",
-    "hostelType": "boys",
-    "ownerName": "John Doe",
-    "email": "john@example.com"
-  }
-}
-```
-
-**Errors:**
-```json
-{ "message": "Hostel not found or unauthorized" }  // 404
+{ "hostel": { "_id": "...", "hostelName": "...", "hostelType": "..." } }
 ```
 
 ---
@@ -393,20 +282,12 @@ All fields optional.
 
 **Request Body:**
 ```json
-{
-  "hostelName": "Blue Ridge Hostel",
-  "hostelType": "girls",
-  "ownerName": "Jane Doe",
-  "email": "jane@example.com"
-}
+{ "hostelName": "New Name", "hostelType": "girls", "ownerName": "Jane", "email": "jane@example.com" }
 ```
 
 **Response `200`:**
 ```json
-{
-  "message": "Hostel updated successfully",
-  "hostel": { "_id": "664b2a...", "hostelName": "Blue Ridge Hostel", ... }
-}
+{ "message": "Hostel updated successfully", "hostel": { ... } }
 ```
 
 ---
@@ -414,64 +295,40 @@ All fields optional.
 ### Delete Hostel
 **DELETE** `/api/hostel/:hostelId`
 
+Cascade deletes: floors, rooms, tenants, payments, expenses, announcements, complaints, temporary tenants.
+
 **Response `200`:**
 ```json
-{ "message": "Hostel deleted successfully" }
+{ "message": "Hostel and all related data deleted successfully" }
 ```
-
-> Deleting a hostel updates `owner.isExisted` to `false` if no hostels remain.
 
 ---
 
-## 7. Floor API
+## 6. Floor API
 
-> All routes require `Authorization: Bearer <token>`
+> All routes require `Authorization: Bearer <owner-token>`
 
 ### Create Floor
 **POST** `/api/floor/create`
 
 **Request Body:**
 ```json
-{
-  "hostelId": "664b2a...",
-  "floorNumber": 1
-}
+{ "hostelId": "...", "floorNumber": 1 }
 ```
 
 **Response `201`:**
 ```json
-{
-  "message": "Floor created successfully",
-  "floor": {
-    "_id": "664c3b...",
-    "hostelId": "664b2a...",
-    "floorNumber": 1,
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z"
-  }
-}
-```
-
-**Errors:**
-```json
-{ "message": "hostelId and floorNumber are required" }          // 400
-{ "message": "Floor number already exists in this hostel" }     // 400
-{ "message": "Hostel not found or unauthorized" }               // 404
+{ "message": "Floor created successfully", "floor": { "_id": "...", "hostelId": "...", "floorNumber": 1 } }
 ```
 
 ---
 
-### Get All Floors by Hostel
+### Get Floors by Hostel
 **GET** `/api/floor/:hostelId`
 
 **Response `200`:**
 ```json
-{
-  "floors": [
-    { "_id": "664c3b...", "hostelId": "664b2a...", "floorNumber": 1 },
-    { "_id": "664c3c...", "hostelId": "664b2a...", "floorNumber": 2 }
-  ]
-}
+{ "floors": [{ "_id": "...", "floorNumber": 1 }, { "_id": "...", "floorNumber": 2 }] }
 ```
 
 ---
@@ -481,51 +338,22 @@ All fields optional.
 
 **Response `200`:**
 ```json
-{
-  "floor": {
-    "_id": "664c3b...",
-    "hostelId": { "_id": "664b2a...", "hostelName": "Green Valley Hostel" },
-    "floorNumber": 1
-  }
-}
+{ "floor": { "_id": "...", "floorNumber": 1, "hostelId": { "_id": "...", "hostelName": "..." } } }
 ```
 
 ---
 
-### Get Floor Details with Rooms and Tenants
+### Get Floor Details (with rooms and tenants)
 **GET** `/api/floor/:hostelId/details/:floorNumber`
-
-Returns all rooms on the floor with their tenants nested inside.
 
 **Response `200`:**
 ```json
 {
-  "floorNumber": 1,
-  "floorId": "664c3b...",
-  "hostelId": "664b2a...",
+  "floorNumber": 1, "floorId": "...", "hostelId": "...",
   "rooms": [
     {
-      "room": {
-        "_id": "664d4c...",
-        "roomNumber": "101",
-        "roomType": "single",
-        "totalBeds": 2,
-        "occupiedBeds": 1,
-        "vacantBeds": 1
-      },
-      "tenants": [
-        {
-          "_id": "664e5d...",
-          "name": "John Doe",
-          "phoneNumber": "9876543210",
-          "email": "john@example.com",
-          "occupation": "Student",
-          "paymentStatus": "paid",
-          "joinedDate": "2026-01-01T00:00:00.000Z",
-          "monthlyFee": 5000,
-          "deposit": 10000
-        }
-      ]
+      "room": { "_id": "...", "roomNumber": "101", "roomType": "single", "totalBeds": 2, "occupiedBeds": 1, "vacantBeds": 1 },
+      "tenants": [{ "_id": "...", "name": "John", "phoneNumber": "...", "paymentStatus": "pending" }]
     }
   ]
 }
@@ -536,10 +364,7 @@ Returns all rooms on the floor with their tenants nested inside.
 ### Update Floor
 **PUT** `/api/floor/:floorId`
 
-**Request Body:**
-```json
-{ "floorNumber": 3 }
-```
+**Request Body:** `{ "floorNumber": 3 }`
 
 **Response `200`:**
 ```json
@@ -551,16 +376,18 @@ Returns all rooms on the floor with their tenants nested inside.
 ### Delete Floor
 **DELETE** `/api/floor/:floorId`
 
+Cascade deletes: rooms, tenants, payments in those rooms.
+
 **Response `200`:**
 ```json
-{ "message": "Floor deleted successfully" }
+{ "message": "Floor and associated rooms and tenants deleted successfully" }
 ```
 
 ---
 
-## 8. Room API
+## 7. Room API
 
-> All routes require `Authorization: Bearer <token>`
+> All routes require `Authorization: Bearer <owner-token>`
 
 ### Create Room
 **POST** `/api/room/create`
@@ -568,38 +395,19 @@ Returns all rooms on the floor with their tenants nested inside.
 **Request Body:**
 ```json
 {
-  "hostelId": "664b2a...",
-  "floorId": "664c3b...",
-  "roomNumber": "101",
-  "roomType": "single",
-  "totalBeds": 2
+  "hostelId": "...", "floorId": "...",
+  "roomNumber": "101", "roomType": "single", "totalBeds": 2
 }
 ```
+
+**Required:** `hostelId`, `floorId`, `roomNumber`, `roomType`, `totalBeds`
 
 **Response `201`:**
 ```json
 {
   "message": "Room created successfully",
-  "room": {
-    "_id": "664d4c...",
-    "hostelId": "664b2a...",
-    "floorId": "664c3b...",
-    "roomNumber": "101",
-    "roomType": "single",
-    "totalBeds": 2,
-    "occupiedBeds": 0,
-    "vacantBeds": 2,
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z"
-  }
+  "room": { "_id": "...", "roomNumber": "101", "roomType": "single", "totalBeds": 2, "occupiedBeds": 0, "vacantBeds": 2 }
 }
-```
-
-**Errors:**
-```json
-{ "message": "hostelId, floorId, roomNumber, roomType and totalBeds are required" }  // 400
-{ "message": "Room number already exists on this floor" }                            // 400
-{ "message": "Floor not found in this hostel" }                                      // 404
 ```
 
 ---
@@ -609,19 +417,7 @@ Returns all rooms on the floor with their tenants nested inside.
 
 **Response `200`:**
 ```json
-{
-  "rooms": [
-    {
-      "_id": "664d4c...",
-      "roomNumber": "101",
-      "roomType": "single",
-      "totalBeds": 2,
-      "occupiedBeds": 1,
-      "vacantBeds": 1,
-      "floorId": { "_id": "664c3b...", "floorNumber": 1 }
-    }
-  ]
-}
+{ "rooms": [{ "_id": "...", "roomNumber": "101", "totalBeds": 2, "vacantBeds": 1, "floorId": { "floorNumber": 1 } }] }
 ```
 
 ---
@@ -631,7 +427,7 @@ Returns all rooms on the floor with their tenants nested inside.
 
 **Response `200`:**
 ```json
-{ "rooms": [ { "_id": "664d4c...", "roomNumber": "101", ... } ] }
+{ "rooms": [{ "_id": "...", "roomNumber": "101", "roomType": "single" }] }
 ```
 
 ---
@@ -641,17 +437,7 @@ Returns all rooms on the floor with their tenants nested inside.
 
 **Response `200`:**
 ```json
-{
-  "room": {
-    "_id": "664d4c...",
-    "roomNumber": "101",
-    "roomType": "single",
-    "totalBeds": 2,
-    "occupiedBeds": 1,
-    "vacantBeds": 1,
-    "floorId": { "_id": "664c3b...", "floorNumber": 1 }
-  }
-}
+{ "room": { "_id": "...", "roomNumber": "101", "totalBeds": 2, "vacantBeds": 1 } }
 ```
 
 ---
@@ -659,15 +445,11 @@ Returns all rooms on the floor with their tenants nested inside.
 ### Update Room
 **PUT** `/api/room/:roomId`
 
-All fields optional.
+All fields optional. `vacantBeds` auto-recalculates when `totalBeds` is updated.
 
 **Request Body:**
 ```json
-{
-  "roomNumber": "102",
-  "roomType": "double",
-  "totalBeds": 3
-}
+{ "roomNumber": "102", "roomType": "double", "totalBeds": 4 }
 ```
 
 **Response `200`:**
@@ -675,87 +457,56 @@ All fields optional.
 { "message": "Room updated successfully", "room": { ... } }
 ```
 
-> `vacantBeds` is auto-recalculated as `totalBeds - occupiedBeds` when `totalBeds` is updated.
-
 ---
 
 ### Delete Room
 **DELETE** `/api/room/:roomId`
 
+Cascade deletes tenants and their payments.
+
 **Response `200`:**
 ```json
-{ "message": "Room deleted successfully" }
+{ "message": "Room and associated tenants deleted successfully" }
 ```
 
 ---
 
-## 9. Tenant API
+## 8. Tenant API
 
-> All routes require `Authorization: Bearer <token>`
+> All routes require `Authorization: Bearer <owner-token>`
 
 ### Create Tenant
 **POST** `/api/tenant/create`
 
-On creation: room `occupiedBeds` increments, `vacantBeds` decrements. Payment cycles are auto-generated from `joinedDate` to today.
+On creation: room beds updated, 30-day payment cycles generated from `joinedDate` to today, dashboard link logged to console.
 
 **Request Body:**
 ```json
 {
-  "hostelId": "664b2a...",
-  "floorId": "664c3b...",
-  "roomId": "664d4c...",
-  "name": "John Doe",
-  "phoneNumber": "9876543210",
-  "email": "john@example.com",
-  "address": "123 Main St, Chennai",
-  "parentNumber": "9876500000",
-  "aadhaarNumber": "1234-5678-9012",
-  "occupation": "Student",
-  "joinedDate": "2026-01-01",
-  "monthlyFee": 5000,
-  "deposit": 10000,
-  "paymentStatus": "pending"
+  "hostelId": "...", "floorId": "...", "roomId": "...",
+  "name": "John Doe", "phoneNumber": "9876543210",
+  "email": "john@example.com", "address": "123 Main St",
+  "parentNumber": "9876500000", "aadhaarNumber": "1234-5678-9012",
+  "occupation": "Student", "joinedDate": "2026-05-01",
+  "monthlyFee": 5000, "deposit": 10000
 }
 ```
 
-**Required fields:** `hostelId`, `floorId`, `roomId`, `name`, `phoneNumber`
+**Required:** `hostelId`, `floorId`, `roomId`, `name`, `phoneNumber`
 
 **Response `201`:**
 ```json
 {
   "message": "Tenant created successfully",
   "tenant": {
-    "_id": "664e5d...",
-    "hostelId": "664b2a...",
-    "floorId": "664c3b...",
-    "roomId": "664d4c...",
-    "name": "John Doe",
-    "phoneNumber": "9876543210",
-    "email": "john@example.com",
-    "address": "123 Main St, Chennai",
-    "parentNumber": "9876500000",
-    "aadhaarNumber": "1234-5678-9012",
-    "occupation": "Student",
-    "joinedDate": "2026-01-01T00:00:00.000Z",
-    "monthlyFee": 5000,
-    "deposit": 10000,
+    "_id": "...", "name": "John Doe", "phoneNumber": "9876543210",
     "paymentStatus": "pending",
-    "feeStatus": [
-      { "month": 5, "year": 2026, "isPaid": false }
-    ],
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z"
+    "feeStatus": [{ "month": 5, "year": 2026, "isPaid": false }]
   }
 }
 ```
 
-**Errors:**
-```json
-{ "message": "hostelId, floorId, roomId, name and phoneNumber are required" }  // 400
-{ "message": "No vacant beds available in this room" }                         // 400
-{ "message": "Room not found in this hostel/floor" }                           // 404
-{ "message": "Hostel not found or unauthorized" }                              // 404
-```
+> After response, a dashboard link is logged: `[DASHBOARD] John Doe | john@example.com | http://localhost:3000?token=eyJ...`
 
 ---
 
@@ -765,17 +516,12 @@ On creation: room `occupiedBeds` increments, `vacantBeds` decrements. Payment cy
 **Response `200`:**
 ```json
 {
-  "tenants": [
-    {
-      "_id": "664e5d...",
-      "name": "John Doe",
-      "phoneNumber": "9876543210",
-      "paymentStatus": "pending",
-      "feeStatus": [ { "month": 5, "year": 2026, "isPaid": false } ],
-      "floorId": { "_id": "664c3b...", "floorNumber": 1 },
-      "roomId": { "_id": "664d4c...", "roomNumber": "101", "roomType": "single" }
-    }
-  ]
+  "tenants": [{
+    "_id": "...", "name": "John Doe", "phoneNumber": "...",
+    "paymentStatus": "pending",
+    "floorId": { "floorNumber": 1 },
+    "roomId": { "roomNumber": "101", "roomType": "single" }
+  }]
 }
 ```
 
@@ -788,19 +534,10 @@ On creation: room `occupiedBeds` increments, `vacantBeds` decrements. Payment cy
 ```json
 {
   "tenant": {
-    "_id": "664e5d...",
-    "name": "John Doe",
-    "phoneNumber": "9876543210",
-    "email": "john@example.com",
-    "address": "123 Main St",
-    "occupation": "Student",
-    "joinedDate": "2026-01-01T00:00:00.000Z",
-    "monthlyFee": 5000,
-    "deposit": 10000,
-    "paymentStatus": "pending",
-    "feeStatus": [ { "month": 5, "year": 2026, "isPaid": false } ],
-    "floorId": { "_id": "664c3b...", "floorNumber": 1 },
-    "roomId": { "_id": "664d4c...", "roomNumber": "101", "roomType": "single" }
+    "_id": "...", "name": "John Doe", "email": "john@example.com",
+    "joinedDate": "2026-05-01T00:00:00.000Z", "monthlyFee": 5000,
+    "paymentStatus": "pending", "feeStatus": [{ "month": 5, "year": 2026, "isPaid": false }],
+    "floorId": { "floorNumber": 1 }, "roomId": { "roomNumber": "101" }
   }
 }
 ```
@@ -814,19 +551,7 @@ All fields optional.
 
 **Request Body:**
 ```json
-{
-  "name": "Jane Doe",
-  "phoneNumber": "9876500001",
-  "email": "jane@example.com",
-  "address": "456 Side St",
-  "parentNumber": "9876500002",
-  "aadhaarNumber": "9876-5432-1098",
-  "occupation": "Engineer",
-  "joinedDate": "2026-06-01",
-  "monthlyFee": 6000,
-  "deposit": 12000,
-  "paymentStatus": "paid"
-}
+{ "name": "Jane Doe", "monthlyFee": 6000, "paymentStatus": "paid" }
 ```
 
 **Response `200`:**
@@ -839,7 +564,7 @@ All fields optional.
 ### Delete Tenant
 **DELETE** `/api/tenant/:tenantId`
 
-On deletion: room `occupiedBeds` decrements, `vacantBeds` increments. All payment records for this tenant are also deleted.
+Room beds updated. All payment records deleted.
 
 **Response `200`:**
 ```json
@@ -848,46 +573,131 @@ On deletion: room `occupiedBeds` decrements, `vacantBeds` increments. All paymen
 
 ---
 
-## 10. Expense API
+## 9. Temporary Tenant API
 
-> All routes require `Authorization: Bearer <token>`
+### Generate Form Token
+**POST** `/api/temporary-tenant/generate-token`
 
-### Create Expense
-**POST** `/api/expense/create`
+No auth required. Generates a 15-minute token for the tenant form.
 
-`month` and `year` are auto-extracted from the `date` field.
+**Request Body:**
+```json
+{ "hostelId": "..." }
+```
+
+**Response `200`:**
+```json
+{
+  "token": "eyJ...", "hostelId": "...",
+  "issuedAt": "2026-05-20T10:00:00.000Z",
+  "expiresAt": "2026-05-20T10:15:00.000Z",
+  "expiresInMinutes": 15
+}
+```
+
+---
+
+### Submit Tenant Form
+**POST** `/api/temporary-tenant/submit`
+
+Uses the form token as Bearer token. Accepts `floorNumber` and `roomNumber` (not ObjectIds) — resolved internally.
+
+**Headers:**
+```
+Authorization: Bearer <form-token>
+```
 
 **Request Body:**
 ```json
 {
-  "hostelId": "664b2a...",
-  "expenseReason": "Electricity Bill",
-  "amount": 3500,
-  "date": "2026-05-16",
-  "paymentMethod": "cash",
-  "note": "May month electricity bill"
+  "floorNumber": 1, "roomNumber": "101",
+  "name": "John Doe", "phoneNumber": "9876543210",
+  "email": "john@example.com", "address": "123 Main St",
+  "parentNumber": "9876500000", "aadhaarNumber": "1234-5678-9012",
+  "occupation": "Student", "joinedDate": "2026-05-01",
+  "monthlyFee": 5000, "deposit": 10000
 }
 ```
 
-**Required fields:** `hostelId`, `expenseReason`, `amount`, `date`
+**Required:** `floorNumber`, `roomNumber`, `name`, `phoneNumber`
+
+**Response `201`:**
+```json
+{ "message": "Form submitted successfully", "temporaryTenant": { "_id": "...", "name": "John Doe", ... } }
+```
+
+---
+
+### Get Temporary Tenants by Hostel
+**GET** `/api/temporary-tenant/hostel/:hostelId`
+
+> Requires owner auth.
+
+**Response `200`:**
+```json
+{
+  "hostelId": "...", "total": 2,
+  "tenants": [{
+    "_id": "...", "name": "John Doe", "phoneNumber": "...",
+    "floorId": { "floorNumber": 1 }, "roomId": { "roomNumber": "101" },
+    "paymentStatus": "pending"
+  }]
+}
+```
+
+---
+
+### Approve Temporary Tenant
+**POST** `/api/temporary-tenant/approve/:tempTenantId`
+
+> Requires owner auth.
+
+Converts to full tenant, updates room beds, generates payment cycles, deletes temp record.
+
+**Response `201`:**
+```json
+{ "message": "Tenant approved and moved to tenants successfully", "tenant": { ... } }
+```
+
+---
+
+### Delete Temporary Tenant
+**DELETE** `/api/temporary-tenant/:tempTenantId`
+
+> Requires owner auth. Rejects the application.
+
+**Response `200`:**
+```json
+{ "message": "Temporary tenant deleted successfully" }
+```
+
+---
+
+## 10. Expense API
+
+> All routes require `Authorization: Bearer <owner-token>`
+
+### Create Expense
+**POST** `/api/expense/create`
+
+`month` and `year` auto-extracted from `date`.
+
+**Request Body:**
+```json
+{
+  "hostelId": "...", "expenseReason": "Electricity Bill",
+  "amount": 3500, "date": "2026-05-16",
+  "paymentMethod": "cash", "note": "May electricity bill"
+}
+```
+
+**Required:** `hostelId`, `expenseReason`, `amount`, `date`
 
 **Response `201`:**
 ```json
 {
   "message": "Expense created successfully",
-  "expense": {
-    "_id": "664f6e...",
-    "hostelId": "664b2a...",
-    "expenseReason": "Electricity Bill",
-    "amount": 3500,
-    "date": "2026-05-16T00:00:00.000Z",
-    "paymentMethod": "cash",
-    "note": "May month electricity bill",
-    "month": 5,
-    "year": 2026,
-    "createdAt": "2026-05-16T00:00:00.000Z",
-    "updatedAt": "2026-05-16T00:00:00.000Z"
-  }
+  "expense": { "_id": "...", "expenseReason": "Electricity Bill", "amount": 3500, "month": 5, "year": 2026 }
 }
 ```
 
@@ -896,24 +706,11 @@ On deletion: room `occupiedBeds` decrements, `vacantBeds` increments. All paymen
 ### Get Expenses by Hostel
 **GET** `/api/expense/:hostelId`
 
-Optional query params to filter: `?month=5&year=2026`
+Optional query params: `?month=5&year=2026`
 
 **Response `200`:**
 ```json
-{
-  "expenses": [
-    {
-      "_id": "664f6e...",
-      "expenseReason": "Electricity Bill",
-      "amount": 3500,
-      "date": "2026-05-16T00:00:00.000Z",
-      "paymentMethod": "cash",
-      "note": "May month electricity bill",
-      "month": 5,
-      "year": 2026
-    }
-  ]
-}
+{ "expenses": [{ "_id": "...", "expenseReason": "Electricity Bill", "amount": 3500, "month": 5, "year": 2026 }] }
 ```
 
 ---
@@ -921,17 +718,11 @@ Optional query params to filter: `?month=5&year=2026`
 ### Update Expense
 **PUT** `/api/expense/:expenseId`
 
-All fields optional. If `date` is updated, `month` and `year` are recalculated automatically.
+All fields optional. `month`/`year` auto-recalculated if `date` is updated.
 
 **Request Body:**
 ```json
-{
-  "expenseReason": "Water Bill",
-  "amount": 1200,
-  "date": "2026-05-18",
-  "paymentMethod": "upi",
-  "note": "Updated note"
-}
+{ "amount": 4000, "paymentMethod": "upi", "note": "Updated" }
 ```
 
 **Response `200`:**
@@ -953,52 +744,23 @@ All fields optional. If `date` is updated, `month` and `year` are recalculated a
 
 ## 11. Payment API
 
-> All routes require `Authorization: Bearer <token>`
+> All routes require `Authorization: Bearer <owner-token>`
 
-Payment cycles are auto-generated every 30 days from the tenant's `joinedDate`. Only `isPaid`, `paymentMethod`, and `note` can be updated — amount and dates are locked.
+Payment cycles are auto-generated (30 days) from `joinedDate`. `isPaid`, `paymentMethod`, `paymentDate` can be updated. When `isPaid` is changed, the tenant's `feeStatus` and `paymentStatus` are automatically synced.
 
 ### Get Payments by Tenant
 **GET** `/api/payment/:tenantId`
 
-Returns all 30-day cycles with a paid/unpaid summary.
-
 **Response `200`:**
 ```json
 {
-  "tenantId": "664e5d...",
-  "tenantName": "John Doe",
-  "monthlyFee": 5000,
-  "joinedDate": "2026-01-01T00:00:00.000Z",
-  "totalCycles": 5,
-  "paid": 4,
-  "unpaid": 1,
+  "tenantId": "...", "tenantName": "John Doe", "monthlyFee": 5000,
+  "totalCycles": 3, "paid": 2, "unpaid": 1,
   "cycles": [
-    {
-      "_id": "665a1b...",
-      "periodStart": "2026-01-01T00:00:00.000Z",
-      "periodEnd": "2026-01-31T00:00:00.000Z",
-      "amount": 5000,
-      "isPaid": true,
-      "paymentMethod": "cash",
-      "note": "Paid on time"
-    },
-    {
-      "_id": "665a1c...",
-      "periodStart": "2026-01-31T00:00:00.000Z",
-      "periodEnd": "2026-03-02T00:00:00.000Z",
-      "amount": 5000,
-      "isPaid": false,
-      "paymentMethod": null,
-      "note": null
-    }
+    { "_id": "...", "periodStart": "2026-01-01T00:00:00.000Z", "periodEnd": "2026-01-31T00:00:00.000Z", "amount": 5000, "isPaid": true, "paymentDate": "2026-01-05T00:00:00.000Z", "paymentMethod": "upi" },
+    { "_id": "...", "periodStart": "2026-01-31T00:00:00.000Z", "periodEnd": "2026-03-02T00:00:00.000Z", "amount": 5000, "isPaid": false, "paymentDate": null, "paymentMethod": null }
   ]
 }
-```
-
-**Errors:**
-```json
-{ "message": "Tenant not found" }   // 404
-{ "message": "Unauthorized" }       // 403
 ```
 
 ---
@@ -1006,357 +768,306 @@ Returns all 30-day cycles with a paid/unpaid summary.
 ### Get Payments by Hostel
 **GET** `/api/payment/hostel/:hostelId`
 
-Returns all tenants with their payment cycle summaries.
-
 **Response `200`:**
 ```json
 {
-  "payments": [
-    {
-      "tenantId": "664e5d...",
-      "tenantName": "John Doe",
-      "phoneNumber": "9876543210",
-      "joinedDate": "2026-01-01T00:00:00.000Z",
-      "monthlyFee": 5000,
-      "paid": 4,
-      "unpaid": 1,
-      "cycles": [
-        {
-          "_id": "665a1b...",
-          "periodStart": "2026-01-01T00:00:00.000Z",
-          "periodEnd": "2026-01-31T00:00:00.000Z",
-          "amount": 5000,
-          "isPaid": true
-        }
-      ]
-    }
-  ]
+  "payments": [{
+    "tenantId": "...", "tenantName": "John Doe", "phoneNumber": "...",
+    "monthlyFee": 5000, "paid": 2, "unpaid": 1, "cycles": [...]
+  }]
 }
 ```
 
 ---
 
-### Update Payment Status
+### Update Payment
 **PUT** `/api/payment/:paymentId`
 
+All fields optional. Syncs tenant `feeStatus` and `paymentStatus` automatically.
+
 **Request Body:**
 ```json
-{
-  "isPaid": true,
-  "paymentMethod": "upi",
-  "note": "Paid via GPay"
-}
+{ "isPaid": true, "paymentMethod": "upi", "paymentDate": "2026-05-21", "amount": 5000, "note": "Paid on time" }
 ```
-
-All fields optional.
 
 **Response `200`:**
 ```json
-{
-  "message": "Payment updated successfully",
-  "payment": {
-    "_id": "665a1b...",
-    "hostelId": "664b2a...",
-    "tenantId": "664e5d...",
-    "amount": 5000,
-    "periodStart": "2026-01-01T00:00:00.000Z",
-    "periodEnd": "2026-01-31T00:00:00.000Z",
-    "isPaid": true,
-    "paymentMethod": "upi",
-    "note": "Paid via GPay",
-    "updatedAt": "2026-05-16T10:00:00.000Z"
-  }
-}
-```
-
-**Errors:**
-```json
-{ "message": "Payment not found" }  // 404
-{ "message": "Unauthorized" }       // 403
+{ "message": "Payment updated successfully", "payment": { "_id": "...", "isPaid": true, "paymentMethod": "upi", "paymentDate": "..." } }
 ```
 
 ---
 
-## 12. Temporary Tenant API
+## 12. Dashboard API (Tenant-facing)
 
-Temporary tenants are pending applicants who submitted a form via a time-limited token link. Owners review and either approve (converts to a full tenant) or delete them.
+All dashboard routes use **token in request body** (not header). The token is the JWT from the welcome email/dashboard link.
 
-**Base path:** `/api/temporary-tenant`
+### Get Tenant Dashboard
+**POST** `/api/dashboard`
 
----
-
-### Generate Form Token
-**POST** `/api/temporary-tenant/generate-token`
-
-No auth required. Generates a 15-minute JWT that must be passed when submitting the tenant form.
+Returns all tenant data in one call.
 
 **Request Body:**
 ```json
-{ "hostelId": "664b2a..." }
+{ "token": "<dashboard-jwt>" }
 ```
 
 **Response `200`:**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "hostelId": "664b2a...",
-  "issuedAt": "2026-05-20T10:00:00.000Z",
-  "expiresAt": "2026-05-20T10:15:00.000Z",
-  "expiresInMinutes": 15
-}
-```
-
-**Errors:**
-```json
-{ "message": "hostelId is required" }   // 400
-{ "message": "Hostel not found" }       // 404
-```
-
----
-
-### Submit Tenant Form
-**POST** `/api/temporary-tenant/submit`
-
-No owner auth required. Uses the form token from `generate-token` as the Bearer token.
-
-**Headers:**
-```
-Authorization: Bearer <form-token>
-```
-
-**Request Body:**
-```json
-{
-  "floorId": "664c3b...",
-  "roomId": "664d4c...",
-  "name": "John Doe",
-  "phoneNumber": "9876543210",
-  "email": "john@example.com",
-  "address": "123 Main St, Chennai",
-  "parentNumber": "9876500000",
-  "aadhaarNumber": "1234-5678-9012",
-  "occupation": "Student",
-  "joinedDate": "2026-06-01",
-  "monthlyFee": 5000,
-  "deposit": 10000
-}
-```
-
-**Required fields:** `floorId`, `roomId`, `name`, `phoneNumber`
-
-**Response `201`:**
-```json
-{
-  "message": "Form submitted successfully",
-  "temporaryTenant": {
-    "_id": "665b7f...",
-    "hostelId": "664b2a...",
-    "floorId": "664c3b...",
-    "roomId": "664d4c...",
-    "name": "John Doe",
-    "phoneNumber": "9876543210",
-    "email": "john@example.com",
-    "address": "123 Main St, Chennai",
-    "parentNumber": "9876500000",
-    "aadhaarNumber": "1234-5678-9012",
-    "occupation": "Student",
-    "joinedDate": "2026-06-01T00:00:00.000Z",
-    "monthlyFee": 5000,
-    "deposit": 10000,
-    "paymentStatus": "pending",
-    "feeStatus": [ { "month": 5, "year": 2026, "isPaid": false } ],
-    "createdAt": "2026-05-20T10:05:00.000Z",
-    "updatedAt": "2026-05-20T10:05:00.000Z"
-  }
-}
-```
-
-**Errors:**
-```json
-{ "message": "Form token is required" }                          // 401
-{ "message": "Form link has expired. Please request a new one." } // 401
-{ "message": "Invalid form token" }                              // 401
-{ "message": "floorId, roomId, name and phoneNumber are required" } // 400
-{ "message": "No vacant beds available in this room" }           // 400
-{ "message": "Room not found in this hostel/floor" }             // 404
-```
-
----
-
-### Get Temporary Tenants by Hostel
-**GET** `/api/temporary-tenant/hostel/:hostelId`
-
-> Requires `Authorization: Bearer <owner-token>`
-
-Returns all pending temporary tenants for the given hostel. Only accessible by the hostel owner.
-
-**Response `200`:**
-```json
-{
-  "hostelId": "664b2a...",
-  "total": 2,
-  "tenants": [
-    {
-      "_id": "665b7f...",
-      "name": "John Doe",
-      "phoneNumber": "9876543210",
-      "email": "john@example.com",
-      "occupation": "Student",
-      "joinedDate": "2026-06-01T00:00:00.000Z",
-      "monthlyFee": 5000,
-      "deposit": 10000,
-      "paymentStatus": "pending",
-      "floorId": { "_id": "664c3b...", "floorNumber": 1, "floorName": "Ground Floor" },
-      "roomId": { "_id": "664d4c...", "roomNumber": "101", "roomName": "Room A" },
-      "createdAt": "2026-05-20T10:05:00.000Z"
-    }
+  "tenant": {
+    "id": "...", "name": "Dinesh", "phoneNumber": "9876543210",
+    "email": "dinesh@example.com", "occupation": "Student",
+    "joinedDate": "2026-05-21T00:00:00.000Z", "paymentStatus": "pending"
+  },
+  "hostel": {
+    "id": "...", "hostelName": "Test Hostel", "hostelType": "boys",
+    "ownerName": "Test Owner", "ownerNumber": "9876543210", "email": "owner@example.com"
+  },
+  "room": { "id": "...", "roomNumber": "101", "roomType": "single", "totalBeds": 2 },
+  "payments": {
+    "monthlyRent": 6000, "deposit": 12000,
+    "totalDues": 6000, "paidCycles": 0, "unpaidCycles": 1, "lastPaidDate": null,
+    "cycles": [
+      { "_id": "...", "periodStart": "2026-05-21T00:00:00.000Z", "periodEnd": "2026-06-20T00:00:00.000Z", "amount": 6000, "isPaid": false, "paymentDate": null, "paymentMethod": null }
+    ]
+  },
+  "tickets": [
+    { "_id": "...", "title": "Water leakage", "category": "Maintenance", "description": "...", "imageLink": null, "status": "in-progress", "createdAt": "..." }
   ]
 }
 ```
 
-**Errors:**
-```json
-{ "message": "Unauthorized or hostel not found" }  // 403
-```
-
 ---
 
-### Approve Temporary Tenant
-**POST** `/api/temporary-tenant/approve/:tempTenantId`
+### Raise a Ticket
+**POST** `/api/dashboard/ticket`
 
-> Requires `Authorization: Bearer <owner-token>`
+**Request Body:**
+```json
+{
+  "token": "<dashboard-jwt>",
+  "title": "Water leakage",
+  "category": "Maintenance",
+  "description": "There is water leaking from the bathroom ceiling.",
+  "imageLink": "https://example.com/photo.jpg"
+}
+```
 
-Converts the temporary tenant into a full tenant. Also:
-- Increments room `occupiedBeds`, decrements `vacantBeds`
-- Auto-generates 30-day payment cycles from `joinedDate` to today
-- Deletes the temporary tenant record
+**Required:** `token`, `title`, `category`, `description`
+**Optional:** `imageLink`
 
 **Response `201`:**
 ```json
 {
-  "message": "Tenant approved and moved to tenants successfully",
-  "tenant": {
-    "_id": "664e5d...",
-    "hostelId": "664b2a...",
-    "floorId": "664c3b...",
-    "roomId": "664d4c...",
-    "name": "John Doe",
-    "phoneNumber": "9876543210",
-    "paymentStatus": "pending",
-    "feeStatus": [ { "month": 5, "year": 2026, "isPaid": false } ],
-    "createdAt": "2026-05-20T10:10:00.000Z"
-  }
+  "message": "Ticket raised successfully",
+  "ticket": { "_id": "...", "title": "Water leakage", "category": "Maintenance", "status": "open", "imageLink": null }
 }
 ```
 
-**Errors:**
-```json
-{ "message": "Temporary tenant not found" }        // 404
-{ "message": "Room not found" }                    // 404
-{ "message": "No vacant beds available in this room" } // 400
-{ "message": "Unauthorized" }                      // 403
-```
-
 ---
 
-### Delete Temporary Tenant
-**DELETE** `/api/temporary-tenant/:tempTenantId`
+### Get My Tickets
+**POST** `/api/dashboard/tickets`
 
-> Requires `Authorization: Bearer <owner-token>`
-
-Rejects and removes the temporary tenant record without creating a full tenant.
+**Request Body:**
+```json
+{ "token": "<dashboard-jwt>" }
+```
 
 **Response `200`:**
 ```json
-{ "message": "Temporary tenant deleted successfully" }
+{
+  "total": 2,
+  "tickets": [
+    { "_id": "...", "title": "AC not working", "category": "Electrical", "status": "open", "createdAt": "..." },
+    { "_id": "...", "title": "Water leakage", "category": "Maintenance", "status": "in-progress", "createdAt": "..." }
+  ]
+}
+```
+
+---
+
+### Dashboard API Errors
+
+| Status | Message | Reason |
+|--------|---------|--------|
+| `400` | `Token is required` | No token in body |
+| `400` | `title, category and description are required` | Missing fields |
+| `401` | `Invalid token` | Bad/tampered token |
+| `401` | `Dashboard link has expired` | Token expired |
+| `401` | `Invalid token payload` | Missing hostelId/tenantId in token |
+| `404` | `Tenant not found` | Tenant deleted |
+| `404` | `Hostel not found` | Hostel deleted |
+
+---
+
+## 13. Ticket API (Owner-facing)
+
+> All routes require `Authorization: Bearer <owner-token>`
+
+### Get Tickets by Hostel
+**GET** `/api/tickets/hostel/:hostelId`
+
+Returns all tickets with tenant info populated.
+
+**Response `200`:**
+```json
+{
+  "total": 1,
+  "tickets": [{
+    "_id": "...", "title": "Water leakage", "category": "Maintenance",
+    "description": "...", "imageLink": null, "status": "in-progress",
+    "tenantId": { "_id": "...", "name": "Dinesh", "phoneNumber": "9876543210", "roomId": "..." },
+    "createdAt": "...", "updatedAt": "..."
+  }]
+}
+```
+
+---
+
+### Get Tickets by Tenant
+**GET** `/api/tickets/tenant/:tenantId`
+
+**Response `200`:**
+```json
+{
+  "total": 2,
+  "tickets": [
+    { "_id": "...", "title": "AC not working", "category": "Electrical", "status": "open" },
+    { "_id": "...", "title": "Water leakage", "category": "Maintenance", "status": "in-progress" }
+  ]
+}
+```
+
+---
+
+### Update Ticket Status
+**PUT** `/api/tickets/:ticketId/status`
+
+**Request Body:**
+```json
+{ "status": "resolved" }
+```
+
+**Allowed values:** `open` | `in-progress` | `resolved`
+
+**Response `200`:**
+```json
+{ "message": "Ticket status updated", "ticket": { "_id": "...", "status": "resolved", ... } }
 ```
 
 **Errors:**
 ```json
-{ "message": "Temporary tenant not found" }  // 404
-{ "message": "Unauthorized" }                // 403
+{ "message": "status must be one of: open, in-progress, resolved" }  // 400
+{ "message": "Ticket not found" }                                     // 404
+{ "message": "Unauthorized" }                                         // 403
 ```
 
 ---
 
-## 13. Cron Jobs
+## 14. Cron Jobs
 
-## 13. Cron Jobs
-
-### Monthly Fee Reset & Payment Cycle Generator
-
+### Daily Payment Cycle Generator
 **File:** `cron/feeStatusCron.js`
-**Schedule:** `0 0 1 * *` — Runs at 00:00 on the 1st of every month
+**Schedule:** `0 0 * * *` — daily at midnight
 
-**What it does:**
+- Generates next 30-day payment cycle for tenants whose current cycle has ended
+- Adds `{month, year, isPaid: false}` to tenant `feeStatus` for the current month if missing
 
-1. Adds `{ month, year, isPaid: false }` to `feeStatus` array of every tenant that doesn't already have an entry for the current month/year.
+### Payment Reminder
+**File:** `cron/paymentReminderCron.js`
+**Schedule:** `0 12 * * *` — daily at 12:00 PM
 
-2. Finds the last payment cycle for each tenant and creates the next 30-day cycle with `isPaid: false`. Skips if the cycle already exists.
+- Finds all unpaid payments whose `periodStart <= today`
+- Groups by tenant — sends **one email per tenant** with total outstanding amount
+- Skips tenants with no email
+- Repeats daily until `isPaid: true`
 
-**Starts automatically** after MongoDB connects in `server.js`.
+### Health Check
+**File:** `cron/healthCheckCron.js`
+**Schedule:** `*/12 * * * *` — every 12 minutes
+
+- Logs `[HEALTH] Server is alive at <timestamp>`
+- Keeps the Render free-tier server awake
 
 ---
 
-## 14. Error Reference
+## 15. Error Reference
 
 | Status | Meaning |
 |--------|---------|
 | `200` | Success |
 | `201` | Created |
-| `400` | Bad request / missing required fields / duplicate |
-| `401` | No token or invalid token |
+| `400` | Bad request / missing required fields |
+| `401` | No token / invalid token / expired token |
 | `403` | Valid token but not authorized for this resource |
 | `404` | Resource not found |
 | `500` | Internal server error |
 
 ### Common Auth Errors
 ```json
-{ "message": "No token, authorization denied" }   // Missing header
-{ "message": "Invalid or expired token" }         // Bad/expired JWT
-{ "message": "Owner not found" }                  // Token valid but owner deleted
+{ "message": "No token, authorization denied" }   // missing header
+{ "message": "Invalid or expired token" }         // bad JWT
+{ "message": "Owner not found" }                  // token valid but owner deleted
 ```
 
 ---
 
-## 15. API Quick Reference
+## 16. Quick Reference
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/auth/register-login` | No | Register or login |
-| POST | `/api/hostel/create` | Yes | Create hostel |
-| GET | `/api/hostel/list` | Yes | List owner's hostels |
-| GET | `/api/hostel/analytics` | Yes | Owner analytics (overall + per-hostel) |
-| GET | `/api/hostel/:hostelId` | Yes | Get hostel by ID |
-| PUT | `/api/hostel/:hostelId` | Yes | Update hostel |
-| DELETE | `/api/hostel/:hostelId` | Yes | Delete hostel |
-| POST | `/api/floor/create` | Yes | Create floor |
-| GET | `/api/floor/:hostelId` | Yes | List floors |
-| GET | `/api/floor/single/:floorId` | Yes | Get floor by ID |
-| GET | `/api/floor/:hostelId/details/:floorNumber` | Yes | Floor with rooms & tenants |
-| PUT | `/api/floor/:floorId` | Yes | Update floor |
-| DELETE | `/api/floor/:floorId` | Yes | Delete floor |
-| POST | `/api/room/create` | Yes | Create room |
-| GET | `/api/room/:hostelId` | Yes | List rooms by hostel |
-| GET | `/api/room/floor/:floorId` | Yes | List rooms by floor |
-| GET | `/api/room/single/:roomId` | Yes | Get room by ID |
-| PUT | `/api/room/:roomId` | Yes | Update room |
-| DELETE | `/api/room/:roomId` | Yes | Delete room |
-| POST | `/api/tenant/create` | Yes | Create tenant |
-| GET | `/api/tenant/:hostelId` | Yes | List tenants by hostel |
-| GET | `/api/tenant/single/:tenantId` | Yes | Get tenant by ID |
-| PUT | `/api/tenant/:tenantId` | Yes | Update tenant |
-| DELETE | `/api/tenant/:tenantId` | Yes | Delete tenant |
-| POST | `/api/expense/create` | Yes | Create expense |
-| GET | `/api/expense/:hostelId` | Yes | List expenses (filter by month/year) |
-| PUT | `/api/expense/:expenseId` | Yes | Update expense |
-| DELETE | `/api/expense/:expenseId` | Yes | Delete expense |
-| GET | `/api/payment/:tenantId` | Yes | Get payment cycles for tenant |
-| GET | `/api/payment/hostel/:hostelId` | Yes | Get all payments for hostel |
-| PUT | `/api/payment/:paymentId` | Yes | Mark payment paid/unpaid |
-| POST | `/api/temporary-tenant/generate-token` | No | Generate 15-min form token |
-| POST | `/api/temporary-tenant/submit` | Form token | Submit tenant application form |
-| GET | `/api/temporary-tenant/hostel/:hostelId` | Yes | List temporary tenants by hostel |
-| POST | `/api/temporary-tenant/approve/:tempTenantId` | Yes | Approve & convert to full tenant |
-| DELETE | `/api/temporary-tenant/:tempTenantId` | Yes | Reject & delete temporary tenant |
-| GET | `/health` | No | Server health check |
+### Owner APIs (Bearer token required)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register-login` | Register or login |
+| POST | `/api/hostel/create` | Create hostel |
+| GET | `/api/hostel/list` | List owner's hostels |
+| GET | `/api/hostel/analytics` | Owner analytics dashboard |
+| GET | `/api/hostel/:hostelId` | Get hostel by ID |
+| PUT | `/api/hostel/:hostelId` | Update hostel |
+| DELETE | `/api/hostel/:hostelId` | Delete hostel + all data |
+| POST | `/api/floor/create` | Create floor |
+| GET | `/api/floor/:hostelId` | List floors |
+| GET | `/api/floor/single/:floorId` | Get floor by ID |
+| GET | `/api/floor/:hostelId/details/:floorNumber` | Floor with rooms and tenants |
+| PUT | `/api/floor/:floorId` | Update floor |
+| DELETE | `/api/floor/:floorId` | Delete floor + cascade |
+| POST | `/api/room/create` | Create room |
+| GET | `/api/room/:hostelId` | List rooms by hostel |
+| GET | `/api/room/floor/:floorId` | List rooms by floor |
+| GET | `/api/room/single/:roomId` | Get room by ID |
+| PUT | `/api/room/:roomId` | Update room |
+| DELETE | `/api/room/:roomId` | Delete room + tenants |
+| POST | `/api/tenant/create` | Create tenant |
+| GET | `/api/tenant/:hostelId` | List tenants by hostel |
+| GET | `/api/tenant/single/:tenantId` | Get tenant by ID |
+| PUT | `/api/tenant/:tenantId` | Update tenant |
+| DELETE | `/api/tenant/:tenantId` | Delete tenant |
+| POST | `/api/expense/create` | Create expense |
+| GET | `/api/expense/:hostelId` | List expenses (filter: `?month=&year=`) |
+| PUT | `/api/expense/:expenseId` | Update expense |
+| DELETE | `/api/expense/:expenseId` | Delete expense |
+| GET | `/api/payment/hostel/:hostelId` | All payments for hostel |
+| GET | `/api/payment/:tenantId` | Payment cycles for tenant |
+| PUT | `/api/payment/:paymentId` | Update payment status |
+| GET | `/api/temporary-tenant/hostel/:hostelId` | List pending applications |
+| POST | `/api/temporary-tenant/approve/:tempTenantId` | Approve application |
+| DELETE | `/api/temporary-tenant/:tempTenantId` | Reject application |
+| GET | `/api/tickets/hostel/:hostelId` | All tickets for hostel |
+| GET | `/api/tickets/tenant/:tenantId` | Tickets by tenant |
+| PUT | `/api/tickets/:ticketId/status` | Update ticket status |
+
+### Public APIs (no auth)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/temporary-tenant/generate-token` | Generate 15-min form token |
+| POST | `/api/temporary-tenant/submit` | Submit tenant application (form token as Bearer) |
+
+### Tenant Dashboard APIs (token in request body)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/dashboard` | Full dashboard data |
+| POST | `/api/dashboard/ticket` | Raise a support ticket |
+| POST | `/api/dashboard/tickets` | View my tickets |

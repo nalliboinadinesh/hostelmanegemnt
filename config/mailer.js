@@ -1,49 +1,77 @@
 const nodemailer = require('nodemailer');
 
-// Brevo SMTP relay — works on Render (port 587 is allowed via Brevo's relay)
 const getTransporter = () => nodemailer.createTransport({
-  host: process.env.MAIL_HOST || 'smtp-relay.brevo.com',
-  port: parseInt(process.env.MAIL_PORT) || 587,
-  secure: false,
+  service: 'gmail',
   auth: {
-    user: process.env.MAIL_USER,  // ac1201001@smtp-brevo.com
-    pass: process.env.MAIL_PASS,  // xsmtpsib-...
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASS,
   },
 });
 
 const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelName, hostelOwnerName, roomNumber }) => {
   const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const paymentLink = '#';
 
   const html = `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Payment Reminder</title></head>
-<body style="margin:0;padding:0;background-color:#f4f6f9;font-family:Arial,sans-serif;">
-  <table align="center" width="100%" cellpadding="0" cellspacing="0">
+<head><meta charset="UTF-8"><title>Urgent Payment Reminder</title></head>
+<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
     <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0"
-             style="background:#ffffff;margin-top:30px;border-radius:10px;overflow:hidden;">
+      <table width="650" cellpadding="0" cellspacing="0"
+             style="background:#ffffff;margin:30px auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,0.1);">
+        <!-- Header -->
         <tr>
-          <td align="center" style="background:#2563eb;padding:25px;color:white;">
-            <h1 style="margin:0;">Hostel Payment Reminder</h1>
+          <td align="center" style="background:linear-gradient(135deg,#dc2626,#b91c1c);padding:30px;color:white;">
+            <div style="font-size:50px;">&#9888;&#65039;</div>
+            <h1 style="margin:10px 0 0;">PAYMENT OVERDUE</h1>
+            <p style="margin:10px 0 0;font-size:16px;">Immediate Action Required</p>
           </td>
         </tr>
+        <!-- Content -->
         <tr>
-          <td style="padding:35px;color:#333333;">
-            <h2>Hello ${tenantName},</h2>
-            <p style="font-size:16px;line-height:1.6;">This is a friendly reminder that your hostel fee payment is still pending.</p>
-            <table width="100%" cellpadding="10" cellspacing="0" style="margin-top:20px;border-collapse:collapse;">
-              <tr style="background:#f3f4f6;"><td><strong>Room Number</strong></td><td>${roomNumber}</td></tr>
-              <tr><td><strong>Amount Due</strong></td><td>&#8377;${amount}</td></tr>
-              <tr style="background:#f3f4f6;"><td><strong>Due Date</strong></td><td>${fmt(periodEnd)}</td></tr>
+          <td style="padding:35px;color:#333;">
+            <h2 style="color:#b91c1c;">Dear ${tenantName},</h2>
+            <p style="font-size:16px;line-height:1.7;">
+              Our records indicate that your hostel fee payment is still
+              <strong style="color:#dc2626;">pending</strong>.
+              Please complete the payment before the due date to avoid
+              penalties, service restrictions, or additional late charges.
+            </p>
+            <!-- Alert Box -->
+            <table width="100%" cellpadding="15" cellspacing="0"
+                   style="background:#fef2f2;border-left:6px solid #dc2626;border-radius:6px;margin:25px 0;">
+              <tr><td><strong style="color:#b91c1c;font-size:18px;">&#9888;&#65039; Outstanding Amount: &#8377;${amount}</strong></td></tr>
+            </table>
+            <!-- Details -->
+            <table width="100%" cellpadding="12" cellspacing="0"
+                   style="border-collapse:collapse;border:1px solid #e5e7eb;">
+              <tr style="background:#fef2f2;"><td><strong>Room Number</strong></td><td>${roomNumber}</td></tr>
+              <tr><td><strong>Amount Due</strong></td><td style="color:#dc2626;font-weight:bold;">&#8377;${amount}</td></tr>
+              <tr style="background:#fef2f2;"><td><strong>Due Date</strong></td><td style="color:#dc2626;font-weight:bold;">${fmt(periodEnd)}</td></tr>
               <tr><td><strong>Hostel Name</strong></td><td>${hostelName}</td></tr>
             </table>
-            <p style="margin-top:35px;font-size:14px;color:#666;">Kindly make the payment before the due date to avoid late charges.</p>
-            <p style="font-size:15px;">Thank you,<br><strong>${hostelOwnerName}</strong></p>
+            <!-- Warning -->
+            <div style="margin-top:25px;padding:15px;background:#fff7ed;border-left:5px solid #f97316;border-radius:5px;">
+              <strong style="color:#c2410c;">Important:</strong>
+              Failure to clear outstanding dues before the due date may
+              result in late payment charges and further administrative action.
+            </div>
+            <!-- CTA -->
+            <div style="text-align:center;margin-top:35px;">
+              <a href="${paymentLink}"
+                 style="background:#dc2626;color:white;text-decoration:none;padding:14px 30px;border-radius:8px;font-size:16px;font-weight:bold;display:inline-block;">
+                PAY NOW
+              </a>
+            </div>
+            <p style="margin-top:35px;font-size:15px;">If you have already made the payment, please ignore this message.</p>
+            <p style="font-size:15px;">Regards,<br><strong>${hostelOwnerName}</strong></p>
           </td>
         </tr>
+        <!-- Footer -->
         <tr>
-          <td align="center" style="background:#f3f4f6;padding:18px;font-size:13px;color:#666;">
-            &copy; ${new Date().getFullYear()} ${hostelName}. All rights reserved.
+          <td align="center" style="background:#111827;color:#d1d5db;padding:18px;font-size:13px;">
+            &copy; ${new Date().getFullYear()} ${hostelName}. All Rights Reserved.
           </td>
         </tr>
       </table>
@@ -53,9 +81,9 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
 </html>`;
 
   await getTransporter().sendMail({
-    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
+    from: `"Hostel Management" <${process.env.MAIL_USER}>`,
     to,
-    subject: `Payment Reminder — ₹${amount} due | ${hostelName}`,
+    subject: `⚠️ Payment Overdue — ₹${amount} due | ${hostelName}`,
     html,
   });
 };
@@ -150,7 +178,7 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
 </html>`;
 
   await getTransporter().sendMail({
-    from: `"Hostel Management" <${process.env.MAIL_FROM}>`,
+    from: `"Hostel Management" <${process.env.MAIL_USER}>`,
     to,
     subject: `Welcome to ${hostelName} — Your Dashboard is Ready`,
     html,

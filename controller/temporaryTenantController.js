@@ -125,10 +125,21 @@ const approveTenant = async (req, res) => {
     await temp.deleteOne();
     res.status(201).json({ message: "Tenant approved and moved to tenants successfully", tenant });
 
-    // log dashboard link (email disabled until SMTP IP restriction is resolved)
+    // send welcome email after response is sent
     if (tenant.email) {
-      const dashboardLink = buildDashboardLink(tenant.hostelId, tenant._id);
-      console.log(`[DASHBOARD] ${tenant.name} | ${tenant.email} | ${dashboardLink}`);
+      try {
+        const dashboardLink = buildDashboardLink(tenant.hostelId, tenant._id);
+        await sendWelcomeEmail({
+          to:              tenant.email,
+          tenantName:      tenant.name,
+          hostelName:      hostel.hostelName,
+          hostelOwnerName: hostel.ownerName,
+          dashboardLink,
+        });
+        console.log(`[MAIL] Welcome email sent to ${tenant.email}`);
+      } catch (mailErr) {
+        console.error('[MAIL] Welcome email failed:', mailErr.message);
+      }
     }
   } catch (error) { res.status(500).json({ message: error.message }); }
 };

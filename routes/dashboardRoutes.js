@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { getTenantDashboard } = require('../controller/dashboardController');
+const { getTenantDashboard, createTicket, getMyTickets } = require('../controller/dashboardController');
 
-// Public — authenticated via JWT in query param
-// GET /api/dashboard?token=<jwt>
-router.get('/', getTenantDashboard);
+// All authenticated via token in request body
+router.post('/', getTenantDashboard);
+router.post('/ticket', createTicket);
+router.post('/tickets', getMyTickets);
 
 module.exports = router;
