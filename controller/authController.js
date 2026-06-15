@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const Owner = require('../models/Owner');
 const Hostel = require('../models/Hostel');
+const { sendWelcomeEmail, sendPaymentReminder } = require('../config/mailer');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
@@ -42,4 +43,41 @@ const registerOrLogin = async (req, res) => {
   }
 };
 
-module.exports = { registerOrLogin };
+module.exports = { registerOrLogin, sendTestMail };
+
+// POST /api/auth/test-mail
+async function sendTestMail(req, res) {
+  try {
+    const { to, type = 'welcome' } = req.body;
+
+    if (!to) {
+      return res.status(400).json({ message: '`to` email address is required' });
+    }
+
+    if (type === 'welcome') {
+      await sendWelcomeEmail({
+        to,
+        tenantName:      'Test Tenant',
+        hostelName:      'Test Hostel PG',
+        hostelOwnerName: 'Test Owner',
+        dashboardLink:   'http://13.60.202.87:3000?token=test',
+      });
+    } else if (type === 'reminder') {
+      await sendPaymentReminder({
+        to,
+        tenantName:      'Test Tenant',
+        amount:          5000,
+        periodEnd:       new Date(),
+        hostelName:      'Test Hostel PG',
+        hostelOwnerName: 'Test Owner',
+        roomNumber:      '101',
+      });
+    } else {
+      return res.status(400).json({ message: '`type` must be "welcome" or "reminder"' });
+    }
+
+    res.status(200).json({ message: `Test ${type} email sent successfully to ${to}` });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
