@@ -4,8 +4,8 @@ const Payment = require('../models/Payment');
 
 const startFeeStatusCron = () => {
 
-  // Runs daily at 00:00 — generates next payment cycle for tenants whose current cycle ends today
-  cron.schedule('0 0 * * *', async () => {
+  // Runs daily at 17:40 — generates next payment cycle for tenants whose current cycle ends today
+  cron.schedule('40 17 * * *', async () => {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -64,7 +64,7 @@ const startFeeStatusCron = () => {
     }
   });
 
-  console.log('[CRON] Daily payment cycle cron job scheduled');
+  console.log('[CRON] Daily payment cycle cron job scheduled at 17:40');
 };
 
 module.exports = startFeeStatusCron;
