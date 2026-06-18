@@ -11,7 +11,7 @@ const buildDashboardLink = (hostelId, tenantId) => {
     { hostelId: hostelId.toString(), tenantId: tenantId.toString() },
     process.env.JWT_SECRET
   );
-  return `https://tenora-eight.vercel.app?token=${token}&hostelId=${hostelId}&tenantId=${tenantId}`;
+  return `http://localhost:3000?token=${token}&hostelId=${hostelId}&tenantId=${tenantId}`;
 };
 
 const generateFormToken = async (req, res) => {

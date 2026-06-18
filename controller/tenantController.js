@@ -16,7 +16,7 @@ const buildDashboardLink = (hostelId, tenantId) => {
     process.env.JWT_SECRET
     // no expiry — permanent access link
   );
-  return `https://tenora-eight.vercel.app?token=${token}&hostelId=${hostelId}&tenantId=${tenantId}`;
+  return `http://localhost:3000?token=${token}&hostelId=${hostelId}&tenantId=${tenantId}`;
 };
 
 // POST /api/tenant/create
@@ -213,39 +213,4 @@ const deleteTenant = async (req, res) => {
   }
 };
 
-// POST /api/tenant/:tenantId/resend-link
-// Regenerates dashboard link with updated base URL and resends welcome email
-const resendDashboardLink = async (req, res) => {
-  try {
-    const tenant = await Tenant.findById(req.params.tenantId);
-    if (!tenant) {
-      return res.status(404).json({ message: 'Tenant not found' });
-    }
-
-    const hostel = await verifyHostelOwner(tenant.hostelId, req.owner._id);
-    if (!hostel) {
-      return res.status(403).json({ message: 'Unauthorized' });
-    }
-
-    const dashboardLink = buildDashboardLink(tenant.hostelId, tenant._id);
-
-    // If tenant has email, send it; else just return the link
-    if (tenant.email) {
-      await sendWelcomeEmail({
-        to:              tenant.email,
-        tenantName:      tenant.name,
-        hostelName:      hostel.hostelName,
-        hostelOwnerName: hostel.ownerName,
-        dashboardLink,
-      });
-      console.log(`[MAIL] Dashboard link resent to ${tenant.email}`);
-      return res.status(200).json({ message: `Dashboard link resent to ${tenant.email}`, dashboardLink });
-    }
-
-    res.status(200).json({ message: 'No email on file — here is the dashboard link', dashboardLink });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-module.exports = { createTenant, getTenantsByHostel, getTenantById, updateTenant, deleteTenant, resendDashboardLink };
+module.exports = { createTenant, getTenantsByHostel, getTenantById, updateTenant, deleteTenant };
