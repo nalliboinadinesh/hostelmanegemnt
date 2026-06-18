@@ -10,7 +10,14 @@ const getTicketsByHostel = async (req, res) => {
     if (!hostel) return res.status(403).json({ message: 'Unauthorized or hostel not found' });
 
     const tickets = await Ticket.find({ hostelId: req.params.hostelId })
-      .populate('tenantId', 'name phoneNumber roomId')
+      .populate({
+        path: 'tenantId',
+        select: 'name phoneNumber roomId',
+        populate: {
+          path: 'roomId',
+          select: 'roomNumber',
+        },
+      })
       .sort({ createdAt: -1 });
 
     res.status(200).json({ total: tickets.length, tickets });
