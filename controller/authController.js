@@ -60,7 +60,7 @@ async function sendTestMail(req, res) {
         tenantName:      'Test Tenant',
         hostelName:      'Test Hostel PG',
         hostelOwnerName: 'Test Owner',
-        dashboardLink:   'http://13.60.202.87:3000?token=test',
+        dashboardLink:   'https://tenora-eight.vercel.app/api/dashboard?token=test',
       });
     } else if (type === 'reminder') {
       await sendPaymentReminder({

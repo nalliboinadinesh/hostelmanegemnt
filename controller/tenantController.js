@@ -16,7 +16,7 @@ const buildDashboardLink = (hostelId, tenantId) => {
     process.env.JWT_SECRET
     // no expiry — permanent access link
   );
-  return `https://tenora-eight.vercel.app/?token=${token}&hostelId=${hostelId}&tenantId=${tenantId}`;
+  return `https://tenora-eight.vercel.app/api/dashboard?token=${token}`;
 };
 
 // POST /api/tenant/create
