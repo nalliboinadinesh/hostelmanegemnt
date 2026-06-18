@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const Owner = require('../models/Owner');
 const Hostel = require('../models/Hostel');
+const Tenant = require('../models/Tenant');
 const { sendWelcomeEmail, sendPaymentReminder } = require('../config/mailer');
 
 const generateToken = (id) => {
@@ -48,19 +49,33 @@ module.exports = { registerOrLogin, sendTestMail };
 // POST /api/auth/test-mail
 async function sendTestMail(req, res) {
   try {
-    const { to, type = 'welcome' } = req.body;
+    const { to, type = 'welcome', tenantId } = req.body;
 
     if (!to) {
       return res.status(400).json({ message: '`to` email address is required' });
     }
 
     if (type === 'welcome') {
+      // If a real tenantId is provided, generate a proper dashboard token
+      let dashboardLink = 'https://tenora-eight.vercel.app/api/dashboard?token=preview';
+
+      if (tenantId) {
+        const tenant = await Tenant.findById(tenantId);
+        if (tenant) {
+          const token = jwt.sign(
+            { hostelId: tenant.hostelId.toString(), tenantId: tenant._id.toString() },
+            process.env.JWT_SECRET
+          );
+          dashboardLink = `https://tenora-eight.vercel.app/api/dashboard?token=${token}`;
+        }
+      }
+
       await sendWelcomeEmail({
         to,
         tenantName:      'Test Tenant',
         hostelName:      'Test Hostel PG',
         hostelOwnerName: 'Test Owner',
-        dashboardLink:   'https://tenora-eight.vercel.app/api/dashboard?token=test',
+        dashboardLink,
       });
     } else if (type === 'reminder') {
       await sendPaymentReminder({
