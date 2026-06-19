@@ -57,7 +57,7 @@ async function sendTestMail(req, res) {
 
     if (type === 'welcome') {
       // If a real tenantId is provided, generate a proper dashboard token
-      let dashboardLink = 'https://tenora-eight.vercel.app/api/dashboard?token=preview';
+      let dashboardLink = 'https://tenora-eight.vercel.app/?token=preview';
 
       if (tenantId) {
         const tenant = await Tenant.findById(tenantId);
@@ -66,7 +66,7 @@ async function sendTestMail(req, res) {
             { hostelId: tenant.hostelId.toString(), tenantId: tenant._id.toString() },
             process.env.JWT_SECRET
           );
-          dashboardLink = `https://tenora-eight.vercel.app/api/dashboard?token=${token}`;
+          dashboardLink = `https://tenora-eight.vercel.app/?token=${token}`;
         }
       }
 
