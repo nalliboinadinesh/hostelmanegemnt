@@ -59,30 +59,39 @@ const getPaymentsByHostel = async (req, res) => {
 
     const tenants = await Tenant.find({ hostelId: req.params.hostelId }, 'name phoneNumber joinedDate monthlyFee');
 
-    const result = await Promise.all(
-      tenants.map(async (tenant) => {
-        const payments = await Payment.find({ tenantId: tenant._id }).sort({ periodStart: 1 });
-        return {
-          tenantId: tenant._id,
-          tenantName: tenant.name,
-          phoneNumber: tenant.phoneNumber,
-          joinedDate: tenant.joinedDate,
-          monthlyFee: tenant.monthlyFee,
-          paid: payments.filter(p => p.isPaid).length,
-          unpaid: payments.filter(p => !p.isPaid).length,
-          cycles: payments.map(p => ({
-            _id: p._id,
-            periodStart: p.periodStart,
-            periodEnd: p.periodEnd,
-            amount: p.amount,
-            isPaid: p.isPaid,
-            paymentMethod: p.paymentMethod,
-            paymentDate: p.paymentDate,
-            note: p.note,
-          })),
-        };
-      })
-    );
+    // BUG-07 FIX: fetch all payments in one query and group in memory (was N+1 queries)
+    const tenantIds = tenants.map(t => t._id);
+    const allPayments = await Payment.find({ tenantId: { $in: tenantIds } }).sort({ periodStart: 1 }).lean();
+
+    const paymentMap = {};
+    for (const p of allPayments) {
+      const tid = p.tenantId.toString();
+      if (!paymentMap[tid]) paymentMap[tid] = [];
+      paymentMap[tid].push(p);
+    }
+
+    const result = tenants.map(tenant => {
+      const payments = paymentMap[tenant._id.toString()] || [];
+      return {
+        tenantId: tenant._id,
+        tenantName: tenant.name,
+        phoneNumber: tenant.phoneNumber,
+        joinedDate: tenant.joinedDate,
+        monthlyFee: tenant.monthlyFee,
+        paid: payments.filter(p => p.isPaid).length,
+        unpaid: payments.filter(p => !p.isPaid).length,
+        cycles: payments.map(p => ({
+          _id: p._id,
+          periodStart: p.periodStart,
+          periodEnd: p.periodEnd,
+          amount: p.amount,
+          isPaid: p.isPaid,
+          paymentMethod: p.paymentMethod,
+          paymentDate: p.paymentDate,
+          note: p.note,
+        })),
+      };
+    });
 
     res.status(200).json({ payments: result });
   } catch (error) {
@@ -110,6 +119,17 @@ const updatePayment = async (req, res) => {
     if (paymentDate) payment.paymentDate = new Date(paymentDate);
     if (amount !== undefined) payment.amount = amount;
     if (note) payment.note = note;
+
+    // BUG-12 FIX: auto-set paymentDate to now when marking paid with no date provided
+    // prevents analytics todayCollection/monthlyCollection being 0
+    if (isPaid === true && !paymentDate && !payment.paymentDate) {
+      payment.paymentDate = new Date();
+    }
+    // If marking unpaid, clear the paymentDate
+    if (isPaid === false) {
+      payment.paymentDate = undefined;
+      payment.paymentMethod = undefined;
+    }
 
     await payment.save();
 

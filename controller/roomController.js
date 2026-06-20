@@ -128,6 +128,12 @@ const updateRoom = async (req, res) => {
     if (roomType) room.roomType = roomType;
 
     if (totalBeds !== undefined) {
+      // BUG-05 FIX: prevent vacantBeds going negative
+      if (totalBeds < room.occupiedBeds) {
+        return res.status(400).json({
+          message: `Cannot set totalBeds to ${totalBeds} — room currently has ${room.occupiedBeds} occupied bed(s)`,
+        });
+      }
       room.totalBeds = totalBeds;
       room.vacantBeds = totalBeds - room.occupiedBeds;
     }

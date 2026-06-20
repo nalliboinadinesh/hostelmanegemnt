@@ -40,7 +40,8 @@ const getTenantDashboard = async (req, res) => {
     if (!hostel)  return res.status(404).json({ message: 'Hostel not found' });
 
     const [room, payments, tickets] = await Promise.all([
-      Room.findById(tenant.roomId).lean(),
+      // BUG-13 FIX: scope room query to hostelId to prevent data leak from other hostels
+      Room.findOne({ _id: tenant.roomId, hostelId }).lean(),
       Payment.find({ tenantId: tenant._id }).sort({ periodStart: 1 }).lean(),
       Ticket.find({ tenantId: tenant._id }).sort({ createdAt: -1 }).lean(),
     ]);

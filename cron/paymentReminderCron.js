@@ -23,10 +23,11 @@ const startPaymentReminderCron = () => {
       const today = new Date();
       today.setHours(23, 59, 59, 999);
 
-      // All unpaid cycles that have already started
+      // BUG-08 FIX: only remind for cycles whose periodEnd has passed (genuinely overdue)
+      // was: periodStart <= today which sent reminders on the very first day of a cycle
       const unpaidPayments = await Payment.find({
         isPaid: false,
-        periodStart: { $lte: today },
+        periodEnd: { $lte: today },
       }).lean();
 
       if (!unpaidPayments.length) {

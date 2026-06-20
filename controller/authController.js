@@ -44,10 +44,8 @@ const registerOrLogin = async (req, res) => {
   }
 };
 
-module.exports = { registerOrLogin, sendTestMail };
-
 // POST /api/auth/test-mail
-async function sendTestMail(req, res) {
+const sendTestMail = async (req, res) => {
   try {
     const { to, type = 'welcome', tenantId } = req.body;
 
@@ -95,4 +93,7 @@ async function sendTestMail(req, res) {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}
+};
+
+// BUG-01 FIX: module.exports moved to bottom — after all functions are defined
+module.exports = { registerOrLogin, sendTestMail };

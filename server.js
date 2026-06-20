@@ -3,8 +3,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const startFeeStatusCron = require('./cron/feeStatusCron');
-const startHealthCheckCron = require('./cron/healthCheckCron');
 const startPaymentReminderCron = require('./cron/paymentReminderCron');
+// BUG-14 FIX: removed healthCheckCron — it only logged to stdout every 12 min
+// and was originally meant to prevent Render free-tier sleeping. Not needed on EC2.
 
 dotenv.config();
 
@@ -26,7 +27,6 @@ app.use('/api/tickets', require('./routes/ticketRoutes'));
 
 connectDB().then(() => {
   startFeeStatusCron();
-  startHealthCheckCron();
   startPaymentReminderCron();
   app.listen(process.env.PORT, () => {
     console.log(`server is running in the port ${process.env.PORT}`);

@@ -62,6 +62,10 @@ const createTenant = async (req, res) => {
 
     // auto-generate 30-day payment cycles from joinedDate to today
     if (joinedDate && monthlyFee) {
+      // BUG-06 FIX: reject future joinedDate — would silently create 0 cycles
+      if (new Date(joinedDate) > new Date()) {
+        return res.status(400).json({ message: 'joinedDate cannot be in the future' });
+      }
       const cycles = [];
       let cycleStart = new Date(joinedDate);
       const today = new Date();

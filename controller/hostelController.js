@@ -28,12 +28,14 @@ const buildAnalytics = async (hostelIds) => {
   ]);
 
   const calcStats = (filteredPayments, filteredTenants, filteredRooms) => {
+    // BUG-12 FIX: filter out payments with null paymentDate before date comparisons
+    // null >= date evaluates to false, causing todayCollection/monthlyCollection to always be 0
     const todayCollection = filteredPayments
-      .filter(p => p.isPaid && p.paymentDate >= todayStart && p.paymentDate < todayEnd)
+      .filter(p => p.isPaid && p.paymentDate && p.paymentDate >= todayStart && p.paymentDate < todayEnd)
       .reduce((sum, p) => sum + p.amount, 0);
 
     const monthlyCollection = filteredPayments
-      .filter(p => p.isPaid && p.paymentDate >= monthStart && p.paymentDate < monthEnd)
+      .filter(p => p.isPaid && p.paymentDate && p.paymentDate >= monthStart && p.paymentDate < monthEnd)
       .reduce((sum, p) => sum + p.amount, 0);
 
     const totalDues = filteredPayments
@@ -44,10 +46,10 @@ const buildAnalytics = async (hostelIds) => {
     const totalBeds  = filteredRooms.reduce((sum, r) => sum + (r.totalBeds || 0), 0);
     const occupiedBeds = filteredRooms.reduce((sum, r) => sum + (r.occupiedBeds || 0), 0);
 
-    // paid tenants = tenants who have at least one paid payment this month
+    // BUG-12 FIX: also guard paymentDate here for consistency
     const paidTenantIds = new Set(
       filteredPayments
-        .filter(p => p.isPaid && p.paymentDate >= monthStart && p.paymentDate < monthEnd)
+        .filter(p => p.isPaid && p.paymentDate && p.paymentDate >= monthStart && p.paymentDate < monthEnd)
         .map(p => p.tenantId.toString())
     );
     const allTenantIds = new Set(filteredTenants.map(t => t._id.toString()));

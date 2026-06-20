@@ -7,8 +7,9 @@ const startFeeStatusCron = () => {
   // Runs daily at 17:40 — generates next payment cycle for tenants whose current cycle ends today
   cron.schedule('40 17 * * *', async () => {
     try {
+      // BUG-04 FIX: use end-of-day so cycles ending anytime today are caught
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      today.setHours(23, 59, 59, 999);
 
       const tenants = await Tenant.find({
         joinedDate: { $exists: true },
@@ -23,9 +24,7 @@ const startFeeStatusCron = () => {
         if (!lastPayment) continue;
 
         const periodEnd = new Date(lastPayment.periodEnd);
-        periodEnd.setHours(0, 0, 0, 0);
-
-        // Only generate if the last cycle ends today or earlier
+        // BUG-04 FIX: compare against end-of-day so cycles ending today are included
         if (periodEnd <= today) {
           const nextStart = new Date(lastPayment.periodEnd);
           const nextEnd = new Date(nextStart);
@@ -52,8 +51,10 @@ const startFeeStatusCron = () => {
       }
 
       // Update feeStatus for current month/year for all tenants
-      const month = today.getMonth() + 1;
-      const year = today.getFullYear();
+      // Use a clean date (not end-of-day) for month/year extraction
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
       await Tenant.updateMany(
         { feeStatus: { $not: { $elemMatch: { month, year } } } },
         { $push: { feeStatus: { month, year, isPaid: false } } }
