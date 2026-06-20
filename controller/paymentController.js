@@ -163,29 +163,29 @@ const updatePayment = async (req, res) => {
     // --- end cascade ---
 
     // --- Rebuild feeStatus + paymentStatus from scratch using all Payment records ---
+    // Fetch AFTER cascade so updated cycles are included
     const tenant = await Tenant.findById(payment.tenantId);
     if (tenant) {
       const allPayments = await Payment.find({ tenantId: tenant._id }).lean();
 
-      // One feeStatus entry per calendar month — if multiple cycles in same month,
-      // mark month as paid only if ALL cycles in that month are paid
+      // Group all cycles by calendar month, then mark month paid only if ALL cycles in that month are paid
       const feeMap = {};
       for (const p of allPayments) {
         const m = new Date(p.periodStart).getMonth() + 1;
         const y = new Date(p.periodStart).getFullYear();
         const key = `${y}-${m}`;
         if (!(key in feeMap)) {
-          feeMap[key] = { month: m, year: y, isPaid: p.isPaid };
-        } else {
-          if (!p.isPaid) feeMap[key].isPaid = false;
+          feeMap[key] = { month: m, year: y, allPaid: true };
         }
+        // if ANY cycle in this month is unpaid, the whole month is unpaid
+        if (!p.isPaid) feeMap[key].allPaid = false;
       }
 
-      tenant.feeStatus = Object.values(feeMap).sort((a, b) =>
-        a.year !== b.year ? a.year - b.year : a.month - b.month
-      );
+      tenant.feeStatus = Object.values(feeMap)
+        .map(e => ({ month: e.month, year: e.year, isPaid: e.allPaid }))
+        .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
 
-      // paymentStatus = 'paid' only if every month is paid
+      // paymentStatus = 'paid' only if EVERY month entry is paid
       tenant.paymentStatus = tenant.feeStatus.length > 0 && tenant.feeStatus.every(f => f.isPaid)
         ? 'paid'
         : 'pending';
