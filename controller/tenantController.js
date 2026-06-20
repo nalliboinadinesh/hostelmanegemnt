@@ -173,7 +173,7 @@ const updateTenant = async (req, res) => {
     const {
       name, phoneNumber, email, address, parentNumber,
       aadhaarNumber, occupation, joinedDate, monthlyFee,
-      deposit, paymentStatus,
+      deposit, paymentStatus, floorId, roomId,
     } = req.body;
 
     const tenant = await Tenant.findById(req.params.tenantId);
@@ -186,17 +186,99 @@ const updateTenant = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    if (name) tenant.name = name;
-    if (phoneNumber) tenant.phoneNumber = phoneNumber;
-    if (email) tenant.email = email;
-    if (address) tenant.address = address;
-    if (parentNumber) tenant.parentNumber = parentNumber;
-    if (aadhaarNumber) tenant.aadhaarNumber = aadhaarNumber;
-    if (occupation) tenant.occupation = occupation;
-    if (joinedDate) tenant.joinedDate = joinedDate;
-    if (monthlyFee !== undefined) tenant.monthlyFee = monthlyFee;
-    if (deposit !== undefined) tenant.deposit = deposit;
-    if (paymentStatus) tenant.paymentStatus = paymentStatus;
+    // --- Handle room change: update bed counts on old and new room ---
+    if (roomId && roomId.toString() !== tenant.roomId.toString()) {
+      const newRoom = await Room.findOne({ _id: roomId, hostelId: tenant.hostelId });
+      if (!newRoom) {
+        return res.status(404).json({ message: 'New room not found in this hostel' });
+      }
+      if (newRoom.vacantBeds <= 0) {
+        return res.status(400).json({ message: 'No vacant beds available in the new room' });
+      }
+      // free bed in old room
+      const oldRoom = await Room.findById(tenant.roomId);
+      if (oldRoom) {
+        oldRoom.occupiedBeds = Math.max(0, oldRoom.occupiedBeds - 1);
+        oldRoom.vacantBeds += 1;
+        await oldRoom.save();
+      }
+      // occupy bed in new room
+      newRoom.occupiedBeds += 1;
+      newRoom.vacantBeds -= 1;
+      await newRoom.save();
+      tenant.roomId = roomId;
+    }
+
+    // --- Handle joinedDate change: regenerate payment cycles and feeStatus ---
+    const joinedDateChanged = joinedDate && new Date(joinedDate).toISOString() !== new Date(tenant.joinedDate).toISOString();
+    const monthlyFeeChanged = monthlyFee !== undefined && monthlyFee !== tenant.monthlyFee;
+
+    if (joinedDateChanged && new Date(joinedDate) > new Date()) {
+      return res.status(400).json({ message: 'joinedDate cannot be in the future' });
+    }
+
+    if (joinedDateChanged || monthlyFeeChanged) {
+      const effectiveJoinedDate = joinedDate || tenant.joinedDate;
+      const effectiveFee = monthlyFee !== undefined ? monthlyFee : tenant.monthlyFee;
+
+      if (effectiveJoinedDate && effectiveFee) {
+        // Delete old payment cycles and regenerate from new joinedDate
+        await Payment.deleteMany({ tenantId: tenant._id });
+
+        const cycles = [];
+        let cycleStart = new Date(effectiveJoinedDate);
+        const today = new Date();
+        while (cycleStart <= today) {
+          const cycleEnd = new Date(cycleStart);
+          cycleEnd.setDate(cycleEnd.getDate() + 30);
+          cycles.push({
+            hostelId: tenant.hostelId,
+            tenantId: tenant._id,
+            amount: effectiveFee,
+            periodStart: new Date(cycleStart),
+            periodEnd: new Date(cycleEnd),
+            isPaid: false,
+          });
+          cycleStart = new Date(cycleEnd);
+        }
+        if (cycles.length > 0) await Payment.insertMany(cycles);
+
+        // Rebuild feeStatus from new joinedDate
+        const now = new Date();
+        const cursor = new Date(effectiveJoinedDate);
+        cursor.setDate(1);
+        const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const feeEntries = [];
+        while (cursor <= endMonth) {
+          feeEntries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: false });
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+        tenant.feeStatus = feeEntries.length > 0
+          ? feeEntries
+          : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
+        tenant.paymentStatus = 'pending';
+        tenant.markModified('feeStatus');
+      }
+    }
+
+    // --- Update all simple fields ---
+    if (name)                       tenant.name = name;
+    if (phoneNumber)                tenant.phoneNumber = phoneNumber;
+    if (email !== undefined)        tenant.email = email;
+    if (address !== undefined)      tenant.address = address;
+    if (parentNumber !== undefined) tenant.parentNumber = parentNumber;
+    if (aadhaarNumber !== undefined) tenant.aadhaarNumber = aadhaarNumber;
+    if (occupation !== undefined)   tenant.occupation = occupation;
+    if (joinedDate)                 tenant.joinedDate = joinedDate;
+    if (monthlyFee !== undefined)   tenant.monthlyFee = monthlyFee;
+    if (deposit !== undefined)      tenant.deposit = deposit;
+    if (floorId)                    tenant.floorId = floorId;
+
+    // paymentStatus can be set manually only if joinedDate/fee didn't change
+    // (if they changed we already set it to 'pending' above)
+    if (paymentStatus && !joinedDateChanged && !monthlyFeeChanged) {
+      tenant.paymentStatus = paymentStatus;
+    }
 
     await tenant.save();
     res.status(200).json({ message: 'Tenant updated successfully', tenant });
