@@ -46,46 +46,32 @@ const createTenant = async (req, res) => {
       return res.status(400).json({ message: 'No vacant beds available in this room' });
     }
 
-    // Validate joinedDate before creating anything
-    if (joinedDate && new Date(joinedDate) > new Date()) {
-      return res.status(400).json({ message: 'joinedDate cannot be in the future' });
-    }
-
     const now = new Date();
-    const initialPaymentStatus = paymentStatus || 'pending';
 
-    // Build feeStatus array covering every month from joinedDate to today
-    // Past months: isPaid = true (assumed paid since tenant was active)
-    // Current month: isPaid = false if paymentStatus is pending, true if paid
-    const buildFeeStatus = (startDate, currentPaymentStatus) => {
-      const feeStatus = [];
+    // Build feeStatus entries for every calendar month from joinedDate to now
+    // so the tenant record reflects all months since they joined, not just current month
+    const buildFeeStatus = (startDate) => {
+      const entries = [];
       if (!startDate) {
         // No joinedDate — just add current month
-        feeStatus.push({ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: currentPaymentStatus === 'paid' });
-        return feeStatus;
+        return [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
       }
-      const start = new Date(startDate);
-      let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      while (cursor <= currentMonthStart) {
-        const isCurrentMonth = cursor.getTime() === currentMonthStart.getTime();
-        feeStatus.push({
-          month: cursor.getMonth() + 1,
-          year: cursor.getFullYear(),
-          // past months = true, current month = based on paymentStatus
-          isPaid: isCurrentMonth ? currentPaymentStatus === 'paid' : true,
-        });
+      const cursor = new Date(startDate);
+      cursor.setDate(1); // normalize to 1st of month to avoid day-overflow issues
+      const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      while (cursor <= endMonth) {
+        entries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: false });
         cursor.setMonth(cursor.getMonth() + 1);
       }
-      return feeStatus;
+      return entries.length > 0 ? entries : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
     };
 
     const tenant = await Tenant.create({
       hostelId, floorId, roomId, name, phoneNumber,
       email, address, parentNumber, aadhaarNumber,
       occupation, joinedDate, monthlyFee, deposit,
-      paymentStatus: initialPaymentStatus,
-      feeStatus: buildFeeStatus(joinedDate, initialPaymentStatus),
+      paymentStatus: paymentStatus || 'pending',
+      feeStatus: buildFeeStatus(joinedDate),
     });
 
     // update room bed counts
@@ -95,6 +81,10 @@ const createTenant = async (req, res) => {
 
     // auto-generate 30-day payment cycles from joinedDate to today
     if (joinedDate && monthlyFee) {
+      // BUG-06 FIX: reject future joinedDate — would silently create 0 cycles
+      if (new Date(joinedDate) > new Date()) {
+        return res.status(400).json({ message: 'joinedDate cannot be in the future' });
+      }
       const cycles = [];
       let cycleStart = new Date(joinedDate);
       const today = new Date();

@@ -133,24 +133,35 @@ const updatePayment = async (req, res) => {
 
     await payment.save();
 
-    // --- Sync feeStatus + paymentStatus on the tenant ---
+    // --- Sync feeStatus + paymentStatus on the tenant from all payment records ---
     if (isPaid !== undefined) {
       const tenant = await Tenant.findById(payment.tenantId);
       if (tenant) {
-        // Derive the month/year this payment cycle belongs to (use periodStart)
-        const cycleMonth = new Date(payment.periodStart).getMonth() + 1;
-        const cycleYear  = new Date(payment.periodStart).getFullYear();
+        // Fetch ALL payments for this tenant to rebuild feeStatus completely
+        // This ensures feeStatus always reflects the true state of all cycles
+        const allPayments = await Payment.find({ tenantId: tenant._id }).lean();
 
-        // Update the matching feeStatus entry, or push one if missing
-        const entry = tenant.feeStatus.find(f => f.month === cycleMonth && f.year === cycleYear);
-        if (entry) {
-          entry.isPaid = payment.isPaid;
-        } else {
-          tenant.feeStatus.push({ month: cycleMonth, year: cycleYear, isPaid: payment.isPaid });
+        // Rebuild feeStatus: one entry per calendar month derived from each payment's periodStart
+        const feeMap = {};
+        for (const p of allPayments) {
+          const m = new Date(p.periodStart).getMonth() + 1;
+          const y = new Date(p.periodStart).getFullYear();
+          const key = `${y}-${m}`;
+          // If multiple cycles fall in same month, mark paid only if ALL are paid
+          if (!(key in feeMap)) {
+            feeMap[key] = { month: m, year: y, isPaid: p.isPaid };
+          } else {
+            // if any cycle in the month is unpaid, month is unpaid
+            if (!p.isPaid) feeMap[key].isPaid = false;
+          }
         }
 
-        // paymentStatus = 'paid' only if every feeStatus entry is paid, else 'pending'
-        tenant.paymentStatus = tenant.feeStatus.every(f => f.isPaid) ? 'paid' : 'pending';
+        tenant.feeStatus = Object.values(feeMap).sort((a, b) =>
+          a.year !== b.year ? a.year - b.year : a.month - b.month
+        );
+
+        // paymentStatus = 'paid' only if every feeStatus entry is paid
+        tenant.paymentStatus = tenant.feeStatus.length > 0 && tenant.feeStatus.every(f => f.isPaid) ? 'paid' : 'pending';
 
         tenant.markModified('feeStatus');
         await tenant.save();

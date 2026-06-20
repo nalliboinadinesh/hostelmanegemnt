@@ -107,35 +107,29 @@ const approveTenant = async (req, res) => {
     if (room.vacantBeds <= 0) return res.status(400).json({ message: "No vacant beds available in this room" });
     const now = new Date();
 
-    // Build feeStatus covering every month from joinedDate to today
-    const buildFeeStatus = (startDate, currentPaymentStatus) => {
-      const feeStatus = [];
+    // Build feeStatus for every calendar month from joinedDate to now
+    const buildFeeStatus = (startDate) => {
+      const entries = [];
       if (!startDate) {
-        feeStatus.push({ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: currentPaymentStatus === 'paid' });
-        return feeStatus;
+        return [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
       }
-      let cursor = new Date(new Date(startDate).getFullYear(), new Date(startDate).getMonth(), 1);
-      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      while (cursor <= currentMonthStart) {
-        const isCurrentMonth = cursor.getTime() === currentMonthStart.getTime();
-        feeStatus.push({
-          month: cursor.getMonth() + 1,
-          year: cursor.getFullYear(),
-          isPaid: isCurrentMonth ? currentPaymentStatus === 'paid' : true,
-        });
+      const cursor = new Date(startDate);
+      cursor.setDate(1);
+      const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      while (cursor <= endMonth) {
+        entries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: false });
         cursor.setMonth(cursor.getMonth() + 1);
       }
-      return feeStatus;
+      return entries.length > 0 ? entries : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
     };
 
-    const initialPaymentStatus = temp.paymentStatus || "pending";
     const tenant = await Tenant.create({
       hostelId: temp.hostelId, floorId: temp.floorId, roomId: temp.roomId,
       name: temp.name, phoneNumber: temp.phoneNumber, email: temp.email,
       address: temp.address, parentNumber: temp.parentNumber, aadhaarNumber: temp.aadhaarNumber,
       occupation: temp.occupation, joinedDate: temp.joinedDate, monthlyFee: temp.monthlyFee,
-      deposit: temp.deposit, paymentStatus: initialPaymentStatus,
-      feeStatus: buildFeeStatus(temp.joinedDate, initialPaymentStatus),
+      deposit: temp.deposit, paymentStatus: temp.paymentStatus || "pending",
+      feeStatus: buildFeeStatus(temp.joinedDate),
     });
     room.occupiedBeds += 1;
     room.vacantBeds -= 1;
