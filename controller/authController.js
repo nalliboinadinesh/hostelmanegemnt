@@ -95,47 +95,20 @@ const sendTestMail = async (req, res) => {
   }
 };
 
-// GET /api/auth/me — returns owner profile + hostel names
-const getMe = async (req, res) => {
+// GET /api/auth/profile
+const getOwnerProfile = async (req, res) => {
   try {
-    const owner = req.owner;
-    const hostels = await Hostel.find({ ownerId: owner._id }, 'hostelName hostelType');
+    // req.owner is set by protect middleware — fetch the first hostel to get ownerName and email
+    const hostel = await Hostel.findOne({ ownerId: req.owner._id }).lean();
 
     res.status(200).json({
       owner: {
-        _id:         owner._id,
-        ownerNumber: owner.ownerNumber,
-        ownerName:   owner.ownerName || null,
-        email:       owner.email || null,
-        isExisted:   owner.isExisted,
+        _id:         req.owner._id,
+        ownerNumber: req.owner.ownerNumber,
+        isExisted:   req.owner.isExisted,
       },
-      hostels: hostels.map(h => ({ _id: h._id, hostelName: h.hostelName, hostelType: h.hostelType })),
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// PUT /api/auth/me — update owner name and email
-const updateMe = async (req, res) => {
-  try {
-    const { ownerName, email } = req.body;
-    const owner = req.owner;
-
-    if (ownerName !== undefined) owner.ownerName = ownerName;
-    if (email !== undefined)     owner.email = email;
-
-    await owner.save();
-
-    res.status(200).json({
-      message: 'Profile updated successfully',
-      owner: {
-        _id:         owner._id,
-        ownerNumber: owner.ownerNumber,
-        ownerName:   owner.ownerName,
-        email:       owner.email,
-        isExisted:   owner.isExisted,
-      },
+      ownerName: hostel?.ownerName || null,
+      email:     hostel?.email     || null,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -143,4 +116,4 @@ const updateMe = async (req, res) => {
 };
 
 // BUG-01 FIX: module.exports moved to bottom — after all functions are defined
-module.exports = { registerOrLogin, sendTestMail, getMe, updateMe };
+module.exports = { registerOrLogin, sendTestMail, getOwnerProfile };

@@ -25,8 +25,7 @@
 ## 1. Authentication
 
 ### POST `/api/auth/register-login`
-
-**Logic:** Checks if an owner with the given `ownerNumber` exists. If yes, fetches their hostels, refreshes `isExisted` flag, and returns a 30-day JWT. If no, creates a new owner record and returns a JWT with `isExisted: false`. No password — mobile number is the only identity.
+**Logic:** Checks if owner with given `ownerNumber` exists. If yes, returns JWT + hostels. If no, creates new owner and returns JWT with `isExisted: false`. No password needed.
 
 **Auth required:** No
 
@@ -44,7 +43,7 @@
 {
   "token": "eyJhbGci...",
   "isExisted": false,
-  "owner": { "_id": "...", "ownerNumber": "9876543210", "ownerName": null, "email": null, "isExisted": false },
+  "owner": { "_id": "...", "ownerNumber": "9876543210", "isExisted": false },
   "hostels": []
 }
 ```
@@ -54,8 +53,8 @@
 {
   "token": "eyJhbGci...",
   "isExisted": true,
-  "owner": { "_id": "...", "ownerNumber": "9876543210", "ownerName": "Ravi Kumar", "email": "ravi@example.com", "isExisted": true },
-  "hostels": [{ "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys" }]
+  "owner": { "_id": "...", "ownerNumber": "9876543210", "isExisted": true },
+  "hostels": [{ "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar" }]
 }
 ```
 
@@ -63,9 +62,8 @@
 
 ---
 
-### GET `/api/auth/me`
-
-**Logic:** Returns the authenticated owner's profile (phone, name, email) and a list of their hostel names and types. Use this to populate the owner profile screen.
+### GET `/api/auth/profile`
+**Logic:** Returns the authenticated owner's profile. Fetches `ownerName` and `email` from the first hostel record since these fields live on the Hostel model, not Owner model.
 
 **Auth required:** Yes
 
@@ -77,48 +75,10 @@
   "owner": {
     "_id": "6a2fb5b86f18f89d2c0d2502",
     "ownerNumber": "9876543210",
-    "ownerName": "Ravi Kumar",
-    "email": "ravi@example.com",
     "isExisted": true
   },
-  "hostels": [
-    { "_id": "6a2fb6406f18f89d2c0d2505", "hostelName": "Sunrise PG", "hostelType": "boys" },
-    { "_id": "6a2fb6416f18f89d2c0d2506", "hostelName": "Green Villa", "hostelType": "girls" }
-  ]
-}
-```
-
-**Errors:** `401` unauthorized
-
----
-
-### PUT `/api/auth/me`
-
-**Logic:** Updates the authenticated owner's `ownerName` and/or `email`. Send only the fields you want to change.
-
-**Auth required:** Yes
-
-**Request Body** (all optional)
-| Field | Type | Description |
-|---|---|---|
-| `ownerName` | string | Owner's full name |
-| `email` | string | Owner's email address |
-
-```json
-{ "ownerName": "Ravi Kumar", "email": "ravi@example.com" }
-```
-
-**Response `200`**
-```json
-{
-  "message": "Profile updated successfully",
-  "owner": {
-    "_id": "6a2fb5b86f18f89d2c0d2502",
-    "ownerNumber": "9876543210",
-    "ownerName": "Ravi Kumar",
-    "email": "ravi@example.com",
-    "isExisted": true
-  }
+  "ownerName": "Ravi Kumar",
+  "email": "ravi@example.com"
 }
 ```
 
@@ -129,7 +89,7 @@
 ## 2. Hostel
 
 ### POST `/api/hostel/create`
-**Logic:** Creates a hostel under the authenticated owner. Sets `ownerId`, `ownerNumber` from the JWT. Also marks `owner.isExisted = true` so the owner app knows setup is complete.
+**Logic:** Creates a hostel under the authenticated owner. Sets `ownerId` and `ownerNumber` from JWT. Marks `owner.isExisted = true`.
 
 **Auth required:** Yes
 
@@ -158,19 +118,19 @@
 ---
 
 ### GET `/api/hostel/list`
-**Logic:** Returns all hostels where `ownerId` matches the authenticated owner's ID.
+**Logic:** Returns all hostels belonging to the authenticated owner.
 
 **Auth required:** Yes · No body
 
 **Response `200`**
 ```json
-{ "hostels": [{ "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar" }] }
+{ "hostels": [{ "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com" }] }
 ```
 
 ---
 
 ### GET `/api/hostel/analytics`
-**Logic:** Fetches all payments, tenants, and rooms for every hostel the owner has. Computes today's collection (payments marked paid today), monthly collection (paid this calendar month), total dues (all unpaid), bed occupancy, and paid/unpaid tenant counts. Returns both an overall summary and a per-hostel breakdown.
+**Logic:** Computes today's collection, monthly collection, total dues, bed occupancy, and paid/unpaid tenant counts across all owner's hostels. Returns overall summary + per-hostel breakdown.
 
 **Auth required:** Yes · No body
 
@@ -182,20 +142,20 @@
     "totalTenants": 20, "vacantBeds": 8, "totalBeds": 30, "occupiedBeds": 22,
     "paidTenants": 15, "unpaidTenants": 5
   },
-  "hostels": [{ "hostelId": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "todayCollection": 5000, "..." : "..." }]
+  "hostels": [{ "hostelId": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "todayCollection": 5000, "monthlyCollection": 45000, "totalDues": 12000, "totalTenants": 20, "vacantBeds": 8, "totalBeds": 30, "occupiedBeds": 22, "paidTenants": 15, "unpaidTenants": 5 }]
 }
 ```
 
 ---
 
 ### GET `/api/hostel/:hostelId`
-**Logic:** Returns a single hostel, verifying it belongs to the authenticated owner.
+**Logic:** Returns a single hostel. Verifies it belongs to the authenticated owner.
 
 **Auth required:** Yes · URL param: `hostelId`
 
 **Response `200`**
 ```json
-{ "hostel": { "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar" } }
+{ "hostel": { "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com" } }
 ```
 
 **Errors:** `404` not found or unauthorized
@@ -203,24 +163,33 @@
 ---
 
 ### PUT `/api/hostel/:hostelId`
-**Logic:** Updates any combination of `hostelName`, `hostelType`, `ownerName`, `email`. Only sends fields you want to change.
+**Logic:** Updates any combination of hostel fields. Only fields sent in the body are changed.
 
 **Auth required:** Yes · URL param: `hostelId`
 
 **Request Body** (all optional)
+| Field | Type | Description |
+|---|---|---|
+| `hostelName` | string | New hostel name |
+| `hostelType` | string | `"boys"`, `"girls"`, `"mixed"` |
+| `ownerName` | string | Updated owner name |
+| `email` | string | Updated contact email |
+
 ```json
-{ "hostelName": "New Name", "email": "new@example.com" }
+{ "hostelName": "Sunrise PG Phase 2", "hostelType": "mixed", "email": "new@example.com" }
 ```
 
 **Response `200`**
 ```json
-{ "message": "Hostel updated successfully", "hostel": { "..." : "..." } }
+{ "message": "Hostel updated successfully", "hostel": { "_id": "...", "hostelName": "Sunrise PG Phase 2", "hostelType": "mixed", "ownerName": "Ravi Kumar", "email": "new@example.com" } }
 ```
+
+**Errors:** `404` not found or unauthorized
 
 ---
 
 ### DELETE `/api/hostel/:hostelId`
-**Logic:** Cascade deletes the hostel and everything under it — floors, rooms, tenants, payments, expenses, announcements, complaints, temporary tenants. Then rechecks if owner has any remaining hostels and updates `isExisted` accordingly.
+**Logic:** Cascade deletes hostel + all floors, rooms, tenants, payments, expenses, announcements, complaints, temporary tenants. Updates `owner.isExisted` if no hostels remain.
 
 **Auth required:** Yes · URL param: `hostelId`
 
@@ -236,7 +205,7 @@
 ## 3. Floor
 
 ### POST `/api/floor/create`
-**Logic:** Creates a floor inside a hostel. Verifies hostel belongs to the owner. Rejects duplicate floor numbers within the same hostel.
+**Logic:** Creates a floor in a hostel. Verifies hostel ownership. Rejects duplicate floor numbers in same hostel.
 
 **Auth required:** Yes
 
@@ -255,12 +224,12 @@
 { "message": "Floor created successfully", "floor": { "_id": "...", "hostelId": "...", "floorNumber": 1 } }
 ```
 
-**Errors:** `400` missing fields or duplicate floor number · `404` hostel not found
+**Errors:** `400` missing fields or duplicate floor · `404` hostel not found
 
 ---
 
 ### GET `/api/floor/:hostelId`
-**Logic:** Returns all floors for a hostel sorted by `floorNumber` ascending. Verifies hostel ownership.
+**Logic:** Returns all floors for a hostel sorted by `floorNumber` ascending.
 
 **Auth required:** Yes · URL param: `hostelId`
 
@@ -272,29 +241,25 @@
 ---
 
 ### GET `/api/floor/:hostelId/details/:floorNumber`
-**Logic:** Returns a floor with all its rooms and the tenants inside each room. Useful for a floor-view screen — shows occupancy per room in one call.
+**Logic:** Returns a floor with all rooms and tenants inside each room. Useful for a floor-view screen.
 
 **Auth required:** Yes · URL params: `hostelId`, `floorNumber`
 
 **Response `200`**
 ```json
 {
-  "floorNumber": 1,
-  "floorId": "...",
-  "hostelId": "...",
-  "rooms": [
-    {
-      "room": { "_id": "...", "roomNumber": "101", "roomType": "NON AC", "totalBeds": 4, "occupiedBeds": 2, "vacantBeds": 2 },
-      "tenants": [{ "_id": "...", "name": "Arjun", "phoneNumber": "9876543210", "paymentStatus": "pending", "monthlyFee": 5000 }]
-    }
-  ]
+  "floorNumber": 1, "floorId": "...", "hostelId": "...",
+  "rooms": [{
+    "room": { "_id": "...", "roomNumber": "101", "roomType": "NON AC", "totalBeds": 4, "occupiedBeds": 2, "vacantBeds": 2 },
+    "tenants": [{ "_id": "...", "name": "Arjun", "phoneNumber": "9876543210", "paymentStatus": "pending", "monthlyFee": 5000 }]
+  }]
 }
 ```
 
 ---
 
 ### GET `/api/floor/single/:floorId`
-**Logic:** Returns a single floor by its `_id` with the parent hostel populated.
+**Logic:** Returns a single floor by ID with hostel info populated.
 
 **Auth required:** Yes · URL param: `floorId`
 
@@ -306,7 +271,7 @@
 ---
 
 ### PUT `/api/floor/:floorId`
-**Logic:** Updates the floor number. Checks for duplicates in the same hostel before saving.
+**Logic:** Updates floor number. Checks for duplicate in same hostel.
 
 **Auth required:** Yes · URL param: `floorId`
 
@@ -323,7 +288,7 @@
 ---
 
 ### DELETE `/api/floor/:floorId`
-**Logic:** Deletes the floor and cascade-deletes all rooms on that floor, all tenants in those rooms, and all payment records for those tenants.
+**Logic:** Deletes floor + all rooms, tenants, and payments on that floor (cascade).
 
 **Auth required:** Yes · URL param: `floorId`
 
@@ -337,7 +302,7 @@
 ## 4. Room
 
 ### POST `/api/room/create`
-**Logic:** Creates a room under a hostel and floor. Verifies hostel ownership and that the floor belongs to the hostel. Sets `occupiedBeds: 0` and `vacantBeds: totalBeds` automatically. Rejects duplicate room numbers on the same floor.
+**Logic:** Creates a room. Sets `occupiedBeds: 0` and `vacantBeds: totalBeds`. Rejects duplicate room numbers on same floor.
 
 **Auth required:** Yes
 
@@ -346,8 +311,8 @@
 |---|---|---|
 | `hostelId` | string | Yes |
 | `floorId` | string | Yes |
-| `roomNumber` | string | Yes — e.g. `"101"`, `"A1"` |
-| `roomType` | string | Yes — e.g. `"AC"`, `"NON AC"`, `"double"` |
+| `roomNumber` | string | Yes — e.g. `"101"` |
+| `roomType` | string | Yes — e.g. `"AC"`, `"NON AC"` |
 | `totalBeds` | number | Yes |
 
 ```json
@@ -356,10 +321,7 @@
 
 **Response `201`**
 ```json
-{
-  "message": "Room created successfully",
-  "room": { "_id": "...", "roomNumber": "101", "roomType": "NON AC", "totalBeds": 4, "occupiedBeds": 0, "vacantBeds": 4 }
-}
+{ "message": "Room created successfully", "room": { "_id": "...", "roomNumber": "101", "roomType": "NON AC", "totalBeds": 4, "occupiedBeds": 0, "vacantBeds": 4 } }
 ```
 
 **Errors:** `400` missing fields or duplicate room · `404` hostel/floor not found
@@ -367,15 +329,13 @@
 ---
 
 ### GET `/api/room/:hostelId`
-**Logic:** Returns all rooms in a hostel with `floorId` populated to show `floorNumber`.
+**Logic:** Returns all rooms in hostel with `floorId` populated (shows floorNumber).
 
 **Auth required:** Yes · URL param: `hostelId`
 
 **Response `200`**
 ```json
-{
-  "rooms": [{ "_id": "...", "floorId": { "_id": "...", "floorNumber": 1 }, "roomNumber": "101", "totalBeds": 4, "occupiedBeds": 2, "vacantBeds": 2 }]
-}
+{ "rooms": [{ "_id": "...", "floorId": { "_id": "...", "floorNumber": 1 }, "roomNumber": "101", "totalBeds": 4, "occupiedBeds": 2, "vacantBeds": 2 }] }
 ```
 
 ---
@@ -393,7 +353,7 @@
 ---
 
 ### GET `/api/room/single/:roomId`
-**Logic:** Returns a single room by its `_id` with `floorId` populated.
+**Logic:** Returns a single room by ID with floor info populated.
 
 **Auth required:** Yes · URL param: `roomId`
 
@@ -405,7 +365,7 @@
 ---
 
 ### PUT `/api/room/:roomId`
-**Logic:** Updates room details. If `totalBeds` is changed, `vacantBeds` is recalculated as `totalBeds - occupiedBeds`. Rejects if `totalBeds` would be less than current `occupiedBeds`.
+**Logic:** Updates room details. If `totalBeds` is reduced below `occupiedBeds`, request is rejected. `vacantBeds` auto-recalculated as `totalBeds - occupiedBeds`.
 
 **Auth required:** Yes · URL param: `roomId`
 
@@ -416,7 +376,7 @@
 
 **Response `200`**
 ```json
-{ "message": "Room updated successfully", "room": { "_id": "...", "roomType": "AC", "totalBeds": 3, "vacantBeds": 2 } }
+{ "message": "Room updated successfully", "room": { "_id": "...", "roomType": "AC", "totalBeds": 3, "occupiedBeds": 1, "vacantBeds": 2 } }
 ```
 
 **Errors:** `400` totalBeds < occupiedBeds · `400` duplicate room number
@@ -424,7 +384,7 @@
 ---
 
 ### DELETE `/api/room/:roomId`
-**Logic:** Deletes the room and cascade-deletes all tenants in the room and their payment records.
+**Logic:** Deletes room + all tenants inside it + their payment records (cascade).
 
 **Auth required:** Yes · URL param: `roomId`
 
@@ -438,34 +398,34 @@
 ## 5. Tenant
 
 ### POST `/api/tenant/create`
-**Logic:** Creates a tenant and assigns them to a specific hostel, floor, and room. Checks for vacant beds. Increments `occupiedBeds` and decrements `vacantBeds` on the room. Auto-generates 30-day payment cycles from `joinedDate` up to today using `Payment.insertMany`. After the HTTP response is sent, asynchronously sends a welcome email with a permanent dashboard link (JWT containing `hostelId` + `tenantId`). Rejects `joinedDate` in the future.
+**Logic:** Creates tenant, assigns to room, increments `occupiedBeds`, decrements `vacantBeds`. Builds `feeStatus` for every calendar month from `joinedDate` to today. Auto-generates 30-day payment cycles from `joinedDate` to today. Rejects future `joinedDate`. Sends welcome email with permanent dashboard link after response.
 
 **Auth required:** Yes
 
 **Request Body**
-| Field | Type | Required |
-|---|---|---|
-| `hostelId` | string | Yes |
-| `floorId` | string | Yes |
-| `roomId` | string | Yes |
-| `name` | string | Yes |
-| `phoneNumber` | string | Yes |
-| `email` | string | No — welcome email sent here |
-| `address` | string | No |
-| `parentNumber` | string | No |
-| `aadhaarNumber` | string | No |
-| `occupation` | string | No |
-| `joinedDate` | string | No — ISO date, cannot be future |
-| `monthlyFee` | number | No |
-| `deposit` | number | No |
-| `paymentStatus` | string | No — default `"pending"` |
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `hostelId` | string | Yes | |
+| `floorId` | string | Yes | |
+| `roomId` | string | Yes | |
+| `name` | string | Yes | |
+| `phoneNumber` | string | Yes | |
+| `email` | string | No | Welcome email sent here |
+| `address` | string | No | |
+| `parentNumber` | string | No | |
+| `aadhaarNumber` | string | No | |
+| `occupation` | string | No | |
+| `joinedDate` | string | No | ISO date — cannot be future |
+| `monthlyFee` | number | No | Used to generate payment cycles |
+| `deposit` | number | No | |
+| `paymentStatus` | string | No | Default `"pending"` |
 
 ```json
 {
   "hostelId": "...", "floorId": "...", "roomId": "...",
   "name": "Arjun Mehta", "phoneNumber": "9876543210",
   "email": "arjun@example.com", "occupation": "Student",
-  "joinedDate": "2026-01-01", "monthlyFee": 5000, "deposit": 10000
+  "joinedDate": "2026-04-01", "monthlyFee": 5000, "deposit": 10000
 }
 ```
 
@@ -475,8 +435,13 @@
   "message": "Tenant created successfully",
   "tenant": {
     "_id": "...", "name": "Arjun Mehta", "phoneNumber": "9876543210",
-    "monthlyFee": 5000, "deposit": 10000, "paymentStatus": "pending",
-    "feeStatus": [{ "month": 6, "year": 2026, "isPaid": false }]
+    "joinedDate": "2026-04-01T00:00:00.000Z", "monthlyFee": 5000, "deposit": 10000,
+    "paymentStatus": "pending",
+    "feeStatus": [
+      { "month": 4, "year": 2026, "isPaid": false },
+      { "month": 5, "year": 2026, "isPaid": false },
+      { "month": 6, "year": 2026, "isPaid": false }
+    ]
   }
 }
 ```
@@ -486,7 +451,7 @@
 ---
 
 ### GET `/api/tenant/:hostelId`
-**Logic:** Returns all tenants in a hostel. Populates `floorId` (floorNumber) and `roomId` (roomNumber, roomType).
+**Logic:** Returns all tenants in a hostel with `floorId` (floorNumber) and `roomId` (roomNumber, roomType) populated.
 
 **Auth required:** Yes · URL param: `hostelId`
 
@@ -496,6 +461,7 @@
   "tenants": [{
     "_id": "...", "name": "Arjun Mehta", "phoneNumber": "9876543210",
     "monthlyFee": 5000, "paymentStatus": "pending",
+    "feeStatus": [{ "month": 4, "year": 2026, "isPaid": false }],
     "floorId": { "_id": "...", "floorNumber": 1 },
     "roomId": { "_id": "...", "roomNumber": "101", "roomType": "NON AC" }
   }]
@@ -505,7 +471,7 @@
 ---
 
 ### GET `/api/tenant/single/:tenantId`
-**Logic:** Returns a single tenant by ID with floor and room populated. Verifies the tenant belongs to a hostel owned by the authenticated owner.
+**Logic:** Returns a single tenant by ID with floor and room populated.
 
 **Auth required:** Yes · URL param: `tenantId`
 
@@ -514,9 +480,13 @@
 {
   "tenant": {
     "_id": "...", "name": "Arjun Mehta", "email": "arjun@example.com",
-    "aadhaarNumber": "1234 5678 9012", "joinedDate": "2026-01-01T00:00:00.000Z",
+    "aadhaarNumber": "1234 5678 9012", "joinedDate": "2026-04-01T00:00:00.000Z",
     "monthlyFee": 5000, "deposit": 10000, "paymentStatus": "pending",
-    "feeStatus": [{ "month": 6, "year": 2026, "isPaid": false }],
+    "feeStatus": [
+      { "month": 4, "year": 2026, "isPaid": false },
+      { "month": 5, "year": 2026, "isPaid": false },
+      { "month": 6, "year": 2026, "isPaid": false }
+    ],
     "floorId": { "floorNumber": 1 }, "roomId": { "roomNumber": "101", "roomType": "NON AC" }
   }
 }
@@ -525,24 +495,50 @@
 ---
 
 ### PUT `/api/tenant/:tenantId`
-**Logic:** Updates any tenant field. Only fields included in the body are changed. Does not regenerate payment cycles on fee change.
+**Logic:** Updates tenant fields with smart syncing based on what changed:
+
+| Field changed | Side effect |
+|---|---|
+| `name`, `phoneNumber`, `email`, `address`, `parentNumber`, `aadhaarNumber`, `occupation`, `deposit` | Updated directly, no side effects |
+| `roomId` | Frees bed on old room, occupies bed on new room |
+| `floorId` | Updated directly — use with `roomId` when moving floors |
+| `joinedDate` | Deletes all payment cycles, regenerates from new date, rebuilds feeStatus, resets paymentStatus to `"pending"` |
+| `monthlyFee` | Same as joinedDate — cycles regenerated with new amount |
+| `joinedDate` + `monthlyFee` together | Single-pass regeneration with both new values |
+| `paymentStatus` | Manual override — only applied if joinedDate/fee not also changing |
 
 **Auth required:** Yes · URL param: `tenantId`
 
 **Request Body** (all optional)
 ```json
-{ "name": "New Name", "monthlyFee": 6000, "paymentStatus": "paid" }
+{
+  "name": "Arjun Kumar",
+  "phoneNumber": "9000000001",
+  "email": "new@example.com",
+  "address": "New Address",
+  "parentNumber": "9111111111",
+  "aadhaarNumber": "9999 8888 7777",
+  "occupation": "Engineer",
+  "deposit": 12000,
+  "floorId": "...",
+  "roomId": "...",
+  "joinedDate": "2026-03-01",
+  "monthlyFee": 6000,
+  "paymentStatus": "paid"
+}
 ```
 
 **Response `200`**
 ```json
-{ "message": "Tenant updated successfully", "tenant": { "..." : "..." } }
+{ "message": "Tenant updated successfully", "tenant": { "...full updated tenant object..." } }
 ```
+
+**Errors:** `400` future joinedDate · `400` no vacant beds in new room · `403` unauthorized · `404` tenant/room not found
 
 ---
 
 ### DELETE `/api/tenant/:tenantId`
-**Logic:** Deletes the tenant. Frees up one bed on the room (`occupiedBeds - 1`, `vacantBeds + 1`). Deletes all `Payment` records for this tenant.
+**Logic:** Deletes tenant. Frees bed on room (`occupiedBeds - 1`, `vacantBeds + 1`). Deletes all payment records for this tenant.
 
 **Auth required:** Yes · URL param: `tenantId`
 
@@ -556,7 +552,7 @@
 ## 6. Payment
 
 ### GET `/api/payment/hostel/:hostelId`
-**Logic:** Fetches all tenants in the hostel, then fetches all their payment cycles in a single batch query (not N+1). Groups payments by tenant in memory and returns a summary per tenant showing paid count, unpaid count, and every cycle detail.
+**Logic:** Fetches all tenants in the hostel then fetches all their payment cycles in one batch query (not N+1). Groups by tenant in memory. Returns paid/unpaid counts and every cycle per tenant.
 
 **Auth required:** Yes · URL param: `hostelId`
 
@@ -565,10 +561,12 @@
 {
   "payments": [{
     "tenantId": "...", "tenantName": "Arjun Mehta", "phoneNumber": "9876543210",
-    "monthlyFee": 5000, "paid": 3, "unpaid": 2,
+    "joinedDate": "2026-04-01T00:00:00.000Z", "monthlyFee": 5000,
+    "paid": 2, "unpaid": 1,
     "cycles": [{
-      "_id": "...", "periodStart": "2026-01-01T00:00:00.000Z", "periodEnd": "2026-01-31T00:00:00.000Z",
-      "amount": 5000, "isPaid": true, "paymentMethod": "UPI", "paymentDate": "2026-01-05T00:00:00.000Z", "note": "Jan rent"
+      "_id": "...", "periodStart": "2026-04-01T00:00:00.000Z", "periodEnd": "2026-05-01T00:00:00.000Z",
+      "amount": 5000, "isPaid": true, "paymentMethod": "UPI",
+      "paymentDate": "2026-04-05T00:00:00.000Z", "note": "April rent"
     }]
   }]
 }
@@ -577,7 +575,7 @@
 ---
 
 ### GET `/api/payment/:tenantId`
-**Logic:** Returns all 30-day payment cycles for a specific tenant with a summary (total, paid, unpaid counts).
+**Logic:** Returns all 30-day payment cycles for a specific tenant with a summary.
 
 **Auth required:** Yes · URL param: `tenantId`
 
@@ -585,15 +583,23 @@
 ```json
 {
   "tenantId": "...", "tenantName": "Arjun Mehta", "monthlyFee": 5000,
-  "totalCycles": 5, "paid": 3, "unpaid": 2,
-  "cycles": [{ "_id": "...", "periodStart": "...", "periodEnd": "...", "amount": 5000, "isPaid": true, "paymentMethod": "UPI", "paymentDate": "..." }]
+  "joinedDate": "2026-04-01T00:00:00.000Z", "totalCycles": 3, "paid": 2, "unpaid": 1,
+  "cycles": [{
+    "_id": "...", "periodStart": "2026-04-01T00:00:00.000Z", "periodEnd": "2026-05-01T00:00:00.000Z",
+    "amount": 5000, "isPaid": true, "paymentMethod": "UPI", "paymentDate": "2026-04-05T00:00:00.000Z", "note": null
+  }]
 }
 ```
 
 ---
 
 ### PUT `/api/payment/:paymentId`
-**Logic:** Marks a payment cycle paid or unpaid. If `isPaid: true` and no `paymentDate` provided, automatically sets `paymentDate` to now (so analytics are not zero). If `isPaid: false`, clears `paymentDate` and `paymentMethod`. After saving, syncs the tenant's `feeStatus` array for the cycle's month/year, then recalculates `tenant.paymentStatus` (`"paid"` only if all feeStatus entries are paid).
+**Logic:** Updates a payment cycle. Key behaviours:
+- `isPaid: true` with no `paymentDate` → auto-sets `paymentDate` to now (so analytics work correctly)
+- `isPaid: true` → also marks ALL previous unpaid cycles for that tenant as paid (cascade)
+- `isPaid: false` → clears `paymentDate` and `paymentMethod`
+- After any change → rebuilds tenant's `feeStatus` from ALL payment records from scratch
+- `paymentStatus` on tenant → `"paid"` only if every month in feeStatus is paid
 
 **Auth required:** Yes · URL param: `paymentId`
 
@@ -602,7 +608,7 @@
 |---|---|---|
 | `isPaid` | boolean | `true` = paid, `false` = unpaid |
 | `paymentMethod` | string | `"Cash"`, `"UPI"`, `"Bank Transfer"`, `"Cheque"` |
-| `paymentDate` | string | ISO date — defaults to now if marking paid |
+| `paymentDate` | string | ISO date — auto-set to now if marking paid without providing date |
 | `amount` | number | Override cycle amount |
 | `note` | string | Any note |
 
@@ -614,7 +620,10 @@
 ```json
 {
   "message": "Payment updated successfully",
-  "payment": { "_id": "...", "isPaid": true, "paymentMethod": "UPI", "paymentDate": "2026-06-20T10:30:00.000Z", "amount": 5000 }
+  "payment": {
+    "_id": "...", "isPaid": true, "paymentMethod": "UPI",
+    "paymentDate": "2026-06-21T10:00:00.000Z", "amount": 5000, "note": "Paid via PhonePe"
+  }
 }
 ```
 
@@ -625,7 +634,7 @@
 ## 7. Expense
 
 ### POST `/api/expense/create`
-**Logic:** Records an expense for a hostel. Extracts `month` and `year` from the provided date and stores them as separate indexed fields for efficient monthly filtering later.
+**Logic:** Records an expense. Extracts `month` and `year` from the date for monthly filtering.
 
 **Auth required:** Yes
 
@@ -647,7 +656,7 @@
 ```json
 {
   "message": "Expense created successfully",
-  "expense": { "_id": "...", "expenseReason": "Plumbing repair", "amount": 2500, "date": "2026-06-15T00:00:00.000Z", "month": 6, "year": 2026 }
+  "expense": { "_id": "...", "expenseReason": "Plumbing repair", "amount": 2500, "date": "2026-06-15T00:00:00.000Z", "month": 6, "year": 2026, "paymentMethod": "Cash" }
 }
 ```
 
@@ -656,40 +665,38 @@
 ---
 
 ### GET `/api/expense/:hostelId`
-**Logic:** Returns all expenses for a hostel sorted by date descending. Supports optional `month` and `year` query params for filtering.
+**Logic:** Returns all expenses sorted by date descending. Supports optional month/year filter via query params.
 
 **Auth required:** Yes · URL param: `hostelId`
 
-**Query Params** (optional): `month=6&year=2026`
+**Query Params** (optional): `?month=6&year=2026`
 
 **Response `200`**
 ```json
-{
-  "expenses": [{ "_id": "...", "expenseReason": "Plumbing repair", "amount": 2500, "date": "2026-06-15T00:00:00.000Z", "month": 6, "year": 2026, "paymentMethod": "Cash" }]
-}
+{ "expenses": [{ "_id": "...", "expenseReason": "Plumbing repair", "amount": 2500, "date": "2026-06-15T00:00:00.000Z", "month": 6, "year": 2026 }] }
 ```
 
 ---
 
 ### PUT `/api/expense/:expenseId`
-**Logic:** Updates expense fields. If `date` is changed, `month` and `year` are automatically recalculated.
+**Logic:** Updates expense. If `date` changes, `month` and `year` are auto-recalculated.
 
 **Auth required:** Yes · URL param: `expenseId`
 
 **Request Body** (all optional)
 ```json
-{ "amount": 3000, "note": "Updated note", "date": "2026-06-20" }
+{ "expenseReason": "Electrical repair", "amount": 3000, "date": "2026-06-20", "paymentMethod": "UPI", "note": "Updated" }
 ```
 
 **Response `200`**
 ```json
-{ "message": "Expense updated successfully", "expense": { "..." : "..." } }
+{ "message": "Expense updated successfully", "expense": { "...updated expense object..." } }
 ```
 
 ---
 
 ### DELETE `/api/expense/:expenseId`
-**Logic:** Permanently deletes the expense record after verifying hostel ownership.
+**Logic:** Permanently deletes expense after verifying hostel ownership.
 
 **Auth required:** Yes · URL param: `expenseId`
 
@@ -703,20 +710,20 @@
 ## 8. Tickets — Owner
 
 ### GET `/api/tickets/hostel/:hostelId`
-**Logic:** Returns all tickets raised for a hostel sorted newest first. Populates `tenantId` with tenant name, phone number, and room (with room number) so the owner can identify who raised each ticket.
+**Logic:** Returns all tickets for a hostel sorted newest first. Populates tenant name, phone, and room number.
 
 **Auth required:** Yes · URL param: `hostelId`
 
 **Response `200`**
 ```json
 {
-  "total": 2,
+  "total": 1,
   "tickets": [{
     "_id": "...",
     "tenantId": { "_id": "...", "name": "Arjun Mehta", "phoneNumber": "9876543210", "roomId": { "_id": "...", "roomNumber": "101" } },
     "title": "AC not working", "category": "Maintenance",
     "description": "AC stopped cooling.", "imageLink": null,
-    "status": "open", "createdAt": "2026-06-19T10:30:00.000Z"
+    "status": "open", "createdAt": "2026-06-21T10:30:00.000Z", "updatedAt": "2026-06-21T10:30:00.000Z"
   }]
 }
 ```
@@ -724,22 +731,19 @@
 ---
 
 ### GET `/api/tickets/tenant/:tenantId`
-**Logic:** Returns all tickets raised by a specific tenant. Owner must own the hostel the tenant belongs to.
+**Logic:** Returns all tickets by a specific tenant. Owner must own the hostel.
 
 **Auth required:** Yes · URL param: `tenantId`
 
 **Response `200`**
 ```json
-{
-  "total": 1,
-  "tickets": [{ "_id": "...", "title": "AC not working", "category": "Maintenance", "status": "open", "createdAt": "..." }]
-}
+{ "total": 1, "tickets": [{ "_id": "...", "title": "AC not working", "status": "open", "createdAt": "..." }] }
 ```
 
 ---
 
 ### PUT `/api/tickets/:ticketId/status`
-**Logic:** Updates the status of a ticket. Only allowed values are `"open"`, `"in-progress"`, `"resolved"`. Verifies the ticket belongs to a hostel owned by the authenticated owner.
+**Logic:** Updates ticket status. Only `"open"`, `"in-progress"`, `"resolved"` allowed.
 
 **Auth required:** Yes · URL param: `ticketId`
 
@@ -753,18 +757,18 @@
 { "message": "Ticket status updated", "ticket": { "_id": "...", "status": "in-progress", "updatedAt": "..." } }
 ```
 
-**Errors:** `400` invalid status value · `403` unauthorized · `404` ticket not found
+**Errors:** `400` invalid status · `403` unauthorized · `404` ticket not found
 
 ---
 
 ## 9. Tenant Dashboard
 
-These endpoints are for the **tenant-facing app**. They do **not** use the owner Bearer token. Instead a **dashboard JWT** (containing `hostelId` + `tenantId`, no expiry) is passed in the **request body**. This token is embedded in the welcome email link.
+These endpoints are for the **tenant-facing app**. No owner Bearer token — instead a **dashboard JWT** (no expiry, contains `hostelId` + `tenantId`) is passed in the **request body**. This token is in the welcome email link.
 
 ---
 
 ### POST `/api/dashboard`
-**Logic:** Verifies the dashboard JWT. Fetches the tenant (verified against hostelId in token), hostel, room (scoped to hostelId), all payment cycles sorted by period, and all tickets. Computes totalDues, paidCycles, unpaidCycles, lastPaidDate from the payment array. Returns everything in one response.
+**Logic:** Verifies dashboard JWT. Returns full tenant dashboard — profile, hostel, room, all payment cycles with totals, and all tickets.
 
 **Auth required:** No — dashboard token in body
 
@@ -776,12 +780,12 @@ These endpoints are for the **tenant-facing app**. They do **not** use the owner
 **Response `200`**
 ```json
 {
-  "tenant": { "id": "...", "name": "Arjun Mehta", "phoneNumber": "9876543210", "email": "arjun@example.com", "occupation": "Student", "joinedDate": "2026-01-01T00:00:00.000Z", "paymentStatus": "pending" },
+  "tenant": { "id": "...", "name": "Arjun Mehta", "phoneNumber": "9876543210", "email": "arjun@example.com", "occupation": "Student", "joinedDate": "2026-04-01T00:00:00.000Z", "paymentStatus": "pending" },
   "hostel": { "id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "ownerNumber": "9876543210", "email": "ravi@example.com" },
   "room": { "id": "...", "roomNumber": "101", "roomType": "NON AC", "totalBeds": 4 },
   "payments": {
-    "monthlyRent": 5000, "deposit": 10000, "totalDues": 10000,
-    "paidCycles": 3, "unpaidCycles": 2, "lastPaidDate": "2026-04-05T00:00:00.000Z",
+    "monthlyRent": 5000, "deposit": 10000, "totalDues": 5000,
+    "paidCycles": 2, "unpaidCycles": 1, "lastPaidDate": "2026-05-05T00:00:00.000Z",
     "cycles": [{ "_id": "...", "periodStart": "...", "periodEnd": "...", "amount": 5000, "isPaid": true, "paymentDate": "...", "paymentMethod": "UPI" }]
   },
   "tickets": [{ "_id": "...", "title": "AC not working", "category": "Maintenance", "status": "open", "createdAt": "..." }]
@@ -793,7 +797,7 @@ These endpoints are for the **tenant-facing app**. They do **not** use the owner
 ---
 
 ### POST `/api/dashboard/ticket`
-**Logic:** Verifies dashboard JWT, confirms tenant exists, creates a ticket with `status: "open"`. Ticket is immediately visible to the owner via `GET /api/tickets/hostel/:hostelId`.
+**Logic:** Tenant raises a new support ticket. Created with `status: "open"`, immediately visible to owner.
 
 **Auth required:** No — dashboard token in body
 
@@ -807,15 +811,12 @@ These endpoints are for the **tenant-facing app**. They do **not** use the owner
 | `imageLink` | string | No — URL to uploaded image |
 
 ```json
-{ "token": "eyJhbGci...", "title": "Leaking tap", "category": "Water", "description": "Bathroom tap leaking continuously.", "imageLink": null }
+{ "token": "eyJhbGci...", "title": "Leaking tap", "category": "Water", "description": "Bathroom tap leaking.", "imageLink": null }
 ```
 
 **Response `201`**
 ```json
-{
-  "message": "Ticket raised successfully",
-  "ticket": { "_id": "...", "title": "Leaking tap", "category": "Water", "status": "open", "createdAt": "..." }
-}
+{ "message": "Ticket raised successfully", "ticket": { "_id": "...", "title": "Leaking tap", "category": "Water", "status": "open", "createdAt": "..." } }
 ```
 
 **Errors:** `400` title/category/description required · `401` invalid token · `404` tenant not found
@@ -823,7 +824,7 @@ These endpoints are for the **tenant-facing app**. They do **not** use the owner
 ---
 
 ### POST `/api/dashboard/tickets`
-**Logic:** Verifies dashboard JWT and returns all tickets raised by that tenant sorted newest first.
+**Logic:** Returns all tickets raised by the tenant, sorted newest first.
 
 **Auth required:** No — dashboard token in body
 
@@ -844,12 +845,8 @@ These endpoints are for the **tenant-facing app**. They do **not** use the owner
 
 ## 10. Temporary Tenant
 
-Two-step self-registration flow: owner generates a short-lived link → tenant fills form → owner approves or rejects.
-
----
-
 ### POST `/api/temporary-tenant/generate-token`
-**Logic:** Generates a 15-minute JWT containing `hostelId`. Verifies the hostel belongs to the authenticated owner. This token is embedded in a form link shared with the prospective tenant.
+**Logic:** Generates a 15-minute JWT tied to a hostel. Verifies the hostel belongs to the authenticated owner. Share the token as a form link for a prospective tenant.
 
 **Auth required:** Yes
 
@@ -861,10 +858,9 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 **Response `200`**
 ```json
 {
-  "token": "eyJhbGci...",
-  "hostelId": "...",
-  "issuedAt": "2026-06-20T11:00:00.000Z",
-  "expiresAt": "2026-06-20T11:15:00.000Z",
+  "token": "eyJhbGci...", "hostelId": "...",
+  "issuedAt": "2026-06-21T11:00:00.000Z",
+  "expiresAt": "2026-06-21T11:15:00.000Z",
   "expiresInMinutes": 15
 }
 ```
@@ -874,7 +870,7 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 ---
 
 ### POST `/api/temporary-tenant/submit`
-**Logic:** Public form submission. Reads the form token from `Authorization: Bearer <token>` header. Decodes the token to get `hostelId`. Resolves `floorNumber` → `floorId` and `roomNumber` → `roomId` automatically (tenant doesn't need to know IDs). Checks for vacant beds and for duplicate pending submissions by phone number. Creates a `TemporaryTenant` record for the owner to review.
+**Logic:** Public form submission. Reads form token from `Authorization: Bearer` header. Resolves `floorNumber` → floorId and `roomNumber` → roomId automatically. Blocks duplicate phone number submissions. Creates pending TemporaryTenant for owner to review.
 
 **Auth required:** No — form token via `Authorization: Bearer <form_token>`
 
@@ -906,12 +902,12 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 }
 ```
 
-**Errors:** `400` missing required fields · `400` no vacant beds · `400` duplicate phone number pending · `401` token required/expired/invalid · `404` floor/room not found
+**Errors:** `400` missing fields · `400` no vacant beds · `400` duplicate phone pending · `401` token required/expired/invalid · `404` floor/room not found
 
 ---
 
 ### GET `/api/temporary-tenant/hostel/:hostelId`
-**Logic:** Returns all pending temporary tenant applications for a hostel, sorted newest first. Populates floor and room details.
+**Logic:** Returns all pending temporary tenant applications, newest first. Floor and room details populated.
 
 **Auth required:** Yes · URL param: `hostelId`
 
@@ -926,16 +922,13 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 ---
 
 ### POST `/api/temporary-tenant/approve/:tempTenantId`
-**Logic:** Promotes a temporary tenant to a full tenant. Checks for vacant beds, creates the `Tenant` record, increments `occupiedBeds` on the room, generates 30-day payment cycles from `joinedDate` to today, deletes the temporary record, and sends a welcome email with a permanent dashboard link. Skips cycle generation if `joinedDate` is in the future (cron handles it later).
+**Logic:** Promotes temp tenant to full tenant. Checks vacant beds. Creates Tenant record. Increments `occupiedBeds`. Generates payment cycles from `joinedDate` to today. Deletes temp record. Sends welcome email with dashboard link.
 
 **Auth required:** Yes · URL param: `tempTenantId` · No body
 
 **Response `201`**
 ```json
-{
-  "message": "Tenant approved and moved to tenants successfully",
-  "tenant": { "_id": "...", "name": "Priya Sharma", "monthlyFee": 5000, "paymentStatus": "pending" }
-}
+{ "message": "Tenant approved and moved to tenants successfully", "tenant": { "_id": "...", "name": "Priya Sharma", "monthlyFee": 5000, "paymentStatus": "pending" } }
 ```
 
 **Errors:** `400` no vacant beds · `403` unauthorized · `404` temp tenant/room not found
@@ -943,7 +936,7 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 ---
 
 ### DELETE `/api/temporary-tenant/:tempTenantId`
-**Logic:** Rejects and permanently deletes the temporary tenant application. No room bed counts are affected.
+**Logic:** Rejects and permanently deletes the application. No bed counts affected.
 
 **Auth required:** Yes · URL param: `tempTenantId`
 
@@ -957,7 +950,7 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 ## 11. Test Mail
 
 ### POST `/api/auth/test-mail`
-**Logic:** Sends a test email to verify the mail service works. For `type: "welcome"`, if a real `tenantId` is provided, generates a proper JWT dashboard link for that tenant. Otherwise uses a preview placeholder URL. For `type: "reminder"`, sends a dummy payment reminder.
+**Logic:** Sends a test email. For `type: "welcome"` with a real `tenantId`, generates a proper JWT dashboard link. For `type: "reminder"`, sends a dummy payment reminder email.
 
 **Auth required:** No
 
@@ -966,7 +959,7 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 |---|---|---|
 | `to` | string | Yes — recipient email |
 | `type` | string | No — `"welcome"` (default) or `"reminder"` |
-| `tenantId` | string | No — if provided with welcome, uses real tenant data |
+| `tenantId` | string | No — if provided with welcome type, uses real tenant data |
 
 ```json
 { "to": "nalliboinadinesh9441@gmail.com", "type": "welcome", "tenantId": "6a350db7b206aa3747c7737f" }
@@ -983,17 +976,15 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 
 ## 12. Cron Jobs
 
-### Fee Status Cron — runs daily at 17:40 UTC
-
-**Logic:** Iterates all tenants with `joinedDate` and `monthlyFee > 0`. For each, finds the most recent payment cycle. If the cycle's `periodEnd` is today or earlier (end-of-day comparison), generates the next 30-day cycle as a new `Payment` document. Also pushes a new `feeStatus` entry for the current month/year on any tenant missing one.
+### Fee Status Cron — daily at 17:40 UTC
+**Logic:** Finds all tenants with `joinedDate` and `monthlyFee > 0`. For each, finds the latest payment cycle. If `periodEnd` is today or earlier (end-of-day check), generates next 30-day cycle. Also pushes a new `feeStatus` entry for current month on any tenant missing it.
 
 **Schedule:** `40 17 * * *`
 
 ---
 
-### Payment Reminder Cron — runs daily at 12:00 PM UTC
-
-**Logic:** Finds all unpaid payment cycles whose `periodEnd` has already passed (genuinely overdue). Groups by tenant (one email per tenant even if multiple cycles are due). Fetches tenant email, hostel name, room number. Computes total outstanding across all overdue cycles. Sends a payment reminder email with the total due and earliest cycle's due date. Skips tenants with no email.
+### Payment Reminder Cron — daily at 12:00 PM UTC
+**Logic:** Finds all unpaid cycles where `periodEnd` has already passed (genuinely overdue, not just started). Groups by tenant (one email per tenant). Computes total outstanding. Sends payment reminder email. Skips tenants with no email.
 
 **Schedule:** `0 12 * * *`
 
@@ -1007,7 +998,7 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 | `201` | Created |
 | `400` | Bad Request — missing or invalid fields |
 | `401` | Unauthorized — missing, invalid, or expired token |
-| `403` | Forbidden — valid token but resource doesn't belong to you |
+| `403` | Forbidden — valid token but resource belongs to another owner |
 | `404` | Not Found |
 | `500` | Internal Server Error |
 
@@ -1017,9 +1008,12 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 
 - All IDs are MongoDB ObjectIds (24-character hex strings)
 - All timestamps are ISO 8601 (`YYYY-MM-DDTHH:mm:ss.sssZ`)
-- Payment cycles are 30-day windows generated from `joinedDate` to today on tenant creation
-- `feeStatus` on a tenant is synced from `Payment` collection when `PUT /api/payment/:paymentId` is called
-- Dashboard token has **no expiry** — permanent link for the tenant
-- Form token (temporary tenant) expires in **15 minutes**
-- Welcome email is sent automatically on tenant create and temporary tenant approve
-- Dashboard link format: `https://dashboard-frontend-five-rough.vercel.app/?token=<jwt>`
+- `feeStatus` is built from `joinedDate` to today on tenant create — one entry per calendar month
+- `feeStatus` is always rebuilt from the Payment table whenever any payment is updated
+- Marking a payment as `paid` auto-marks all earlier unpaid cycles as paid too (cascade)
+- `paymentStatus = "paid"` only when every month in `feeStatus` is paid
+- Payment cycles are 30-day windows, `feeStatus` is calendar-month based — both stay in sync
+- Dashboard token — **no expiry**, permanent link for tenant
+- Form token — **15 minutes**, used only for temporary tenant self-registration
+- Welcome email sent automatically on tenant create and temporary tenant approve
+- Dashboard link format: `https://dashboard-frontend-five-rouge.vercel.app/?token=<jwt>`
