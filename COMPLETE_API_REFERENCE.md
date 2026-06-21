@@ -44,7 +44,7 @@
 {
   "token": "eyJhbGci...",
   "isExisted": false,
-  "owner": { "_id": "...", "ownerNumber": "9876543210", "isExisted": false },
+  "owner": { "_id": "...", "ownerNumber": "9876543210", "ownerName": null, "email": null, "isExisted": false },
   "hostels": []
 }
 ```
@@ -54,12 +54,75 @@
 {
   "token": "eyJhbGci...",
   "isExisted": true,
-  "owner": { "_id": "...", "ownerNumber": "9876543210", "isExisted": true },
+  "owner": { "_id": "...", "ownerNumber": "9876543210", "ownerName": "Ravi Kumar", "email": "ravi@example.com", "isExisted": true },
   "hostels": [{ "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys" }]
 }
 ```
 
 **Errors:** `400` ownerNumber required · `500` server error
+
+---
+
+### GET `/api/auth/me`
+
+**Logic:** Returns the authenticated owner's profile (phone, name, email) and a list of their hostel names and types. Use this to populate the owner profile screen.
+
+**Auth required:** Yes
+
+**Request Body:** None
+
+**Response `200`**
+```json
+{
+  "owner": {
+    "_id": "6a2fb5b86f18f89d2c0d2502",
+    "ownerNumber": "9876543210",
+    "ownerName": "Ravi Kumar",
+    "email": "ravi@example.com",
+    "isExisted": true
+  },
+  "hostels": [
+    { "_id": "6a2fb6406f18f89d2c0d2505", "hostelName": "Sunrise PG", "hostelType": "boys" },
+    { "_id": "6a2fb6416f18f89d2c0d2506", "hostelName": "Green Villa", "hostelType": "girls" }
+  ]
+}
+```
+
+**Errors:** `401` unauthorized
+
+---
+
+### PUT `/api/auth/me`
+
+**Logic:** Updates the authenticated owner's `ownerName` and/or `email`. Send only the fields you want to change.
+
+**Auth required:** Yes
+
+**Request Body** (all optional)
+| Field | Type | Description |
+|---|---|---|
+| `ownerName` | string | Owner's full name |
+| `email` | string | Owner's email address |
+
+```json
+{ "ownerName": "Ravi Kumar", "email": "ravi@example.com" }
+```
+
+**Response `200`**
+```json
+{
+  "message": "Profile updated successfully",
+  "owner": {
+    "_id": "6a2fb5b86f18f89d2c0d2502",
+    "ownerNumber": "9876543210",
+    "ownerName": "Ravi Kumar",
+    "email": "ravi@example.com",
+    "isExisted": true
+  }
+}
+```
+
+**Errors:** `401` unauthorized · `500` server error
 
 ---
 
@@ -959,4 +1022,4 @@ Two-step self-registration flow: owner generates a short-lived link → tenant f
 - Dashboard token has **no expiry** — permanent link for the tenant
 - Form token (temporary tenant) expires in **15 minutes**
 - Welcome email is sent automatically on tenant create and temporary tenant approve
-- Dashboard link format: `https://dashboard-frontend-five-rouge.vercel.app/?token=<jwt>`
+- Dashboard link format: `https://dashboard-frontend-five-rough.vercel.app/?token=<jwt>`
