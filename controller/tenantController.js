@@ -16,7 +16,7 @@ const buildDashboardLink = (hostelId, tenantId) => {
     process.env.JWT_SECRET
     // no expiry — permanent access link
   );
-  return `https://dashboard-frontend-five-rouge.vercel.app/?token=${token}`;
+  return `https://dashboard-frontend-five-rough.vercel.app/?token=${token}`;
 };
 
 // POST /api/tenant/create
