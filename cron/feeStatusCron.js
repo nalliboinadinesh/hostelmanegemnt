@@ -2,12 +2,23 @@ const cron = require('node-cron');
 const Tenant = require('../models/Tenant');
 const Payment = require('../models/Payment');
 
+/**
+ * Fee Status Cron — daily at 17:40 UTC
+ *
+ * BUG-3 FIX: Skip generating new cycles for tenants whose paymentStatus is 'paid'.
+ *   Previously, a new unpaid cycle was generated every month even for paid tenants,
+ *   immediately resetting their paymentStatus back to 'pending'.
+ *
+ * BUG-4 FIX: New feeStatus entry is pushed with isPaid matching the tenant's paymentStatus,
+ *   not hardcoded false. Paid tenants get isPaid: true for the new month.
+ *
+ * BUG-7 FIX: Replaced per-tenant Payment queries with a single batch query grouped in memory.
+ *   Was firing 2 queries per tenant (find latest + check duplicate). Now 1 query total.
+ */
 const startFeeStatusCron = () => {
 
-  // Runs daily at 17:40 — generates next payment cycle for tenants whose current cycle ends today
   cron.schedule('40 17 * * *', async () => {
     try {
-      // BUG-04 FIX: use end-of-day so cycles ending anytime today are caught
       const today = new Date();
       today.setHours(23, 59, 59, 999);
 
@@ -16,29 +27,55 @@ const startFeeStatusCron = () => {
         monthlyFee: { $exists: true, $gt: 0 },
       });
 
+      if (!tenants.length) return;
+
+      const tenantIds = tenants.map(t => t._id);
+
+      // BUG-7 FIX: batch fetch latest payment per tenant in one query
+      // Get all payments sorted desc by periodEnd, then pick the first per tenant
+      const allPayments = await Payment.find({ tenantId: { $in: tenantIds } })
+        .sort({ periodEnd: -1 })
+        .lean();
+
+      // Build maps: latest payment per tenant + set of existing periodStarts per tenant
+      const latestPaymentMap = {};
+      const existingStartsMap = {};
+      for (const p of allPayments) {
+        const tid = p.tenantId.toString();
+        if (!latestPaymentMap[tid]) {
+          latestPaymentMap[tid] = p; // first one (sorted desc) = latest
+        }
+        if (!existingStartsMap[tid]) existingStartsMap[tid] = new Set();
+        existingStartsMap[tid].add(new Date(p.periodStart).getTime());
+      }
+
       let generated = 0;
+      const newCycles = [];
 
       for (const tenant of tenants) {
-        // Find the latest cycle for this tenant
-        const lastPayment = await Payment.findOne({ tenantId: tenant._id }).sort({ periodEnd: -1 });
+        // BUG-3 FIX: skip cycle generation for tenants already fully paid
+        // (new unpaid cycle was resetting paymentStatus back to 'pending' every month)
+        if (tenant.paymentStatus === 'paid') continue;
+
+        const lastPayment = latestPaymentMap[tenant._id.toString()];
         if (!lastPayment) continue;
 
         const periodEnd = new Date(lastPayment.periodEnd);
-        // BUG-04 FIX: compare against end-of-day so cycles ending today are included
+
         if (periodEnd <= today) {
           const nextStart = new Date(lastPayment.periodEnd);
           const nextEnd = new Date(nextStart);
           nextEnd.setDate(nextEnd.getDate() + 30);
 
-          // Avoid duplicate
-          const exists = await Payment.findOne({ tenantId: tenant._id, periodStart: nextStart });
-          if (!exists) {
-            await Payment.create({
+          // BUG-7 FIX: check duplicate using in-memory set instead of DB query
+          const existingStarts = existingStartsMap[tenant._id.toString()] || new Set();
+          if (!existingStarts.has(nextStart.getTime())) {
+            newCycles.push({
               hostelId: tenant.hostelId,
               tenantId: tenant._id,
               amount: tenant.monthlyFee,
-              periodStart: nextStart,
-              periodEnd: nextEnd,
+              periodStart: new Date(nextStart),
+              periodEnd: new Date(nextEnd),
               isPaid: false,
             });
             generated++;
@@ -46,18 +83,35 @@ const startFeeStatusCron = () => {
         }
       }
 
-      if (generated > 0) {
-        console.log(`[CRON] Generated ${generated} new payment cycle(s) on ${today.toDateString()}`);
+      if (newCycles.length > 0) {
+        await Payment.insertMany(newCycles);
+        console.log(`[CRON] Generated ${generated} new payment cycle(s) on ${new Date().toDateString()}`);
       }
 
-      // Update feeStatus for current month/year for all tenants
-      // Use a clean date (not end-of-day) for month/year extraction
+      // Update feeStatus for current month/year
+      // BUG-4 FIX: do not push isPaid: false blindly for all tenants.
+      // For tenants with paymentStatus 'paid', push isPaid: true.
+      // For pending tenants, push isPaid: false.
       const now = new Date();
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
+
+      // Push isPaid: false for pending tenants missing this month
       await Tenant.updateMany(
-        { feeStatus: { $not: { $elemMatch: { month, year } } } },
+        {
+          paymentStatus: { $ne: 'paid' },
+          feeStatus: { $not: { $elemMatch: { month, year } } },
+        },
         { $push: { feeStatus: { month, year, isPaid: false } } }
+      );
+
+      // BUG-4 FIX: Push isPaid: true for paid tenants missing this month entry
+      await Tenant.updateMany(
+        {
+          paymentStatus: 'paid',
+          feeStatus: { $not: { $elemMatch: { month, year } } },
+        },
+        { $push: { feeStatus: { month, year, isPaid: true } } }
       );
 
     } catch (error) {

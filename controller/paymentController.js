@@ -182,11 +182,10 @@ const updatePayment = async (req, res) => {
         ? 'paid'
         : 'pending';
 
-      // Extra safety: if paymentStatus is 'paid', force all feeStatus entries to isPaid: true
-      // Handles edge case where paymentStatus was manually set but feeStatus wasn't fully synced
-      if (tenant.paymentStatus === 'paid') {
-        tenant.feeStatus = tenant.feeStatus.map(f => ({ ...f, isPaid: true }));
-      }
+      // Extra safety block removed (BUG-5 FIX):
+      // The block `if (paymentStatus === 'paid') force all feeStatus true` was logically
+      // unreachable — paymentStatus is only set to 'paid' when every() is already true.
+      // Removed to avoid confusion.
 
       tenant.markModified('feeStatus');
       await tenant.save();
