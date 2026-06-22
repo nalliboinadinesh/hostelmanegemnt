@@ -132,33 +132,25 @@ const updatePayment = async (req, res) => {
 
     await payment.save();
 
-    // --- Cascade: when marking a payment as PAID, also mark all earlier unpaid cycles as paid ---
+    // --- Cascade: when marking a payment as PAID, mark all earlier unpaid cycles as paid too ---
     if (isPaid === true) {
-      // Find all unpaid cycles for this tenant that started BEFORE this cycle
-      const previousUnpaid = await Payment.find({
-        tenantId: payment.tenantId,
-        isPaid: false,
-        periodStart: { $lt: payment.periodStart },
-      });
-
-      if (previousUnpaid.length > 0) {
-        const autoPayDate = payment.paymentDate || new Date();
-        await Payment.updateMany(
-          {
-            tenantId: payment.tenantId,
-            isPaid: false,
-            periodStart: { $lt: payment.periodStart },
+      const autoPayDate = payment.paymentDate || new Date();
+      // Mark all unpaid cycles that started ON OR BEFORE this cycle's periodStart
+      await Payment.updateMany(
+        {
+          tenantId: payment.tenantId,
+          isPaid: false,
+          periodStart: { $lte: payment.periodStart },
+        },
+        {
+          $set: {
+            isPaid: true,
+            paymentDate: autoPayDate,
+            paymentMethod: payment.paymentMethod || 'Cash',
+            note: 'Auto-marked paid with current month',
           },
-          {
-            $set: {
-              isPaid: true,
-              paymentDate: autoPayDate,
-              paymentMethod: payment.paymentMethod || 'Cash',
-              note: 'Auto-marked paid with current month',
-            },
-          }
-        );
-      }
+        }
+      );
     }
     // --- end cascade ---
 
@@ -189,6 +181,12 @@ const updatePayment = async (req, res) => {
       tenant.paymentStatus = tenant.feeStatus.length > 0 && tenant.feeStatus.every(f => f.isPaid)
         ? 'paid'
         : 'pending';
+
+      // Extra safety: if paymentStatus is 'paid', force all feeStatus entries to isPaid: true
+      // Handles edge case where paymentStatus was manually set but feeStatus wasn't fully synced
+      if (tenant.paymentStatus === 'paid') {
+        tenant.feeStatus = tenant.feeStatus.map(f => ({ ...f, isPaid: true }));
+      }
 
       tenant.markModified('feeStatus');
       await tenant.save();
