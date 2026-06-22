@@ -276,27 +276,10 @@ const updateTenant = async (req, res) => {
     if (deposit !== undefined)       tenant.deposit = deposit;
     if (floorId)                     tenant.floorId = floorId;
 
-    // Always apply paymentStatus if explicitly sent — even alongside fee/joinedDate changes
-    if (paymentStatus) {
+    // paymentStatus can be set manually only if joinedDate/fee didn't change
+    // (if they changed we already set it to 'pending' above)
+    if (paymentStatus && !joinedDateChanged && !monthlyFeeChanged) {
       tenant.paymentStatus = paymentStatus;
-
-      // Sync feeStatus entries to match paymentStatus
-      const isPaidValue = paymentStatus === 'paid';
-      tenant.feeStatus = tenant.feeStatus.map(f => ({ ...f, isPaid: isPaidValue }));
-      tenant.markModified('feeStatus');
-
-      // Sync all Payment cycles to match paymentStatus
-      if (isPaidValue) {
-        await Payment.updateMany(
-          { tenantId: tenant._id },
-          { $set: { isPaid: true, paymentDate: new Date(), note: 'Marked paid via tenant update' } }
-        );
-      } else {
-        await Payment.updateMany(
-          { tenantId: tenant._id },
-          { $set: { isPaid: false }, $unset: { paymentDate: '', paymentMethod: '' } }
-        );
-      }
     }
 
     await tenant.save();
