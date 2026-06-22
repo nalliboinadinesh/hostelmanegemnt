@@ -256,27 +256,29 @@ const updateTenant = async (req, res) => {
         tenant.feeStatus = feeEntries.length > 0
           ? feeEntries
           : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
+
+        // Default to pending after regeneration, but allow paymentStatus override below
         tenant.paymentStatus = 'pending';
         tenant.markModified('feeStatus');
       }
     }
 
     // --- Update all simple fields ---
-    if (name)                       tenant.name = name;
-    if (phoneNumber)                tenant.phoneNumber = phoneNumber;
-    if (email !== undefined)        tenant.email = email;
-    if (address !== undefined)      tenant.address = address;
-    if (parentNumber !== undefined) tenant.parentNumber = parentNumber;
+    if (name)                        tenant.name = name;
+    if (phoneNumber)                 tenant.phoneNumber = phoneNumber;
+    if (email !== undefined)         tenant.email = email;
+    if (address !== undefined)       tenant.address = address;
+    if (parentNumber !== undefined)  tenant.parentNumber = parentNumber;
     if (aadhaarNumber !== undefined) tenant.aadhaarNumber = aadhaarNumber;
-    if (occupation !== undefined)   tenant.occupation = occupation;
-    if (joinedDate)                 tenant.joinedDate = joinedDate;
-    if (monthlyFee !== undefined)   tenant.monthlyFee = monthlyFee;
-    if (deposit !== undefined)      tenant.deposit = deposit;
-    if (floorId)                    tenant.floorId = floorId;
+    if (occupation !== undefined)    tenant.occupation = occupation;
+    if (joinedDate)                  tenant.joinedDate = joinedDate;
+    if (monthlyFee !== undefined)    tenant.monthlyFee = monthlyFee;
+    if (deposit !== undefined)       tenant.deposit = deposit;
+    if (floorId)                     tenant.floorId = floorId;
 
-    // paymentStatus can be set manually only if joinedDate/fee didn't change
-    // (if they changed we already set it to 'pending' above)
-    if (paymentStatus && !joinedDateChanged && !monthlyFeeChanged) {
+    // Always apply paymentStatus if explicitly sent — even alongside fee/joinedDate changes
+    // This lets the owner update fee and mark as paid in one call
+    if (paymentStatus) {
       tenant.paymentStatus = paymentStatus;
     }
 

@@ -258,14 +258,17 @@ Authorization: Bearer <form_token_from_generate-token>
 | `joinedDate` | string | Override join date — ISO format |
 | `monthlyFee` | number | Override monthly rent |
 | `deposit` | number | Override deposit |
+| `paymentStatus` | string | `"paid"` or `"pending"` — default `"pending"` |
 | `floorId` | string | Override floor (ObjectId) |
 | `roomId` | string | Override room (ObjectId) |
 
 ```json
 {
+  "name": "Priya Sharma",
   "joinedDate": "2026-07-01",
   "monthlyFee": 6000,
   "deposit": 12000,
+  "paymentStatus": "pending",
   "roomId": "6a2fb8006f18f89d2c0d2520"
 }
 ```
@@ -282,6 +285,9 @@ Authorization: Bearer <form_token_from_generate-token>
     "name": "Priya Sharma",
     "phoneNumber": "9988776655",
     "email": "priya@example.com",
+    "address": "45 Anna Nagar, Chennai",
+    "parentNumber": "9944332211",
+    "aadhaarNumber": "5678 1234 9012",
     "occupation": "Student",
     "joinedDate": "2026-07-01T00:00:00.000Z",
     "monthlyFee": 6000,
@@ -290,7 +296,8 @@ Authorization: Bearer <form_token_from_generate-token>
     "feeStatus": [
       { "month": 7, "year": 2026, "isPaid": false }
     ],
-    "createdAt": "2026-06-21T11:10:00.000Z"
+    "createdAt": "2026-06-21T11:10:00.000Z",
+    "updatedAt": "2026-06-21T11:10:00.000Z"
   }
 }
 ```

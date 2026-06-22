@@ -118,6 +118,7 @@ const approveTenant = async (req, res) => {
       deposit     = temp.deposit,
       floorId     = temp.floorId,
       roomId      = temp.roomId,
+      paymentStatus = 'pending',
     } = req.body;
 
     // Resolve room from request body or temp record
@@ -157,7 +158,7 @@ const approveTenant = async (req, res) => {
       joinedDate,
       monthlyFee,
       deposit,
-      paymentStatus: "pending",
+      paymentStatus,
       feeStatus: buildFeeStatus(joinedDate),
     });
 
