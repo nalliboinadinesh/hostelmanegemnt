@@ -48,29 +48,34 @@ const createTenant = async (req, res) => {
 
     const now = new Date();
 
+    const isPaidDefault = (paymentStatus === 'paid' || paymentStatus === true || paymentStatus === 'true');
+    const actualPaymentStatus = isPaidDefault ? 'paid' : 'pending';
+
     // Build feeStatus entries for every calendar month from joinedDate to now
     // so the tenant record reflects all months since they joined, not just current month
     const buildFeeStatus = (startDate) => {
       const entries = [];
       if (!startDate) {
         // No joinedDate — just add current month
-        return [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
+        return [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: isPaidDefault }];
       }
       const cursor = new Date(startDate);
       cursor.setDate(1); // normalize to 1st of month to avoid day-overflow issues
+      cursor.setHours(0, 0, 0, 0);
       const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      endMonth.setHours(0, 0, 0, 0);
       while (cursor <= endMonth) {
-        entries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: false });
+        entries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: isPaidDefault });
         cursor.setMonth(cursor.getMonth() + 1);
       }
-      return entries.length > 0 ? entries : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
+      return entries.length > 0 ? entries : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: isPaidDefault }];
     };
 
     const tenant = await Tenant.create({
       hostelId, floorId, roomId, name, phoneNumber,
       email, address, parentNumber, aadhaarNumber,
       occupation, joinedDate, monthlyFee, deposit,
-      paymentStatus: paymentStatus || 'pending',
+      paymentStatus: actualPaymentStatus,
       feeStatus: buildFeeStatus(joinedDate),
     });
 
@@ -97,7 +102,9 @@ const createTenant = async (req, res) => {
           amount: tenant.monthlyFee,
           periodStart: new Date(cycleStart),
           periodEnd: new Date(cycleEnd),
-          isPaid: false,
+          isPaid: isPaidDefault,
+          paymentDate: isPaidDefault ? new Date() : undefined,
+          paymentMethod: isPaidDefault ? 'Cash' : undefined,
         });
         cycleStart = new Date(cycleEnd);
       }
@@ -173,7 +180,7 @@ const updateTenant = async (req, res) => {
     const {
       name, phoneNumber, email, address, parentNumber,
       aadhaarNumber, occupation, joinedDate, monthlyFee,
-      deposit, paymentStatus, floorId, roomId,
+      deposit, paymentStatus, feeStatus, floorId, roomId,
     } = req.body;
 
     const tenant = await Tenant.findById(req.params.tenantId);
@@ -247,7 +254,9 @@ const updateTenant = async (req, res) => {
         const now = new Date();
         const cursor = new Date(effectiveJoinedDate);
         cursor.setDate(1);
+        cursor.setHours(0, 0, 0, 0);
         const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        endMonth.setHours(0, 0, 0, 0);
         const feeEntries = [];
         while (cursor <= endMonth) {
           feeEntries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: false });
@@ -276,10 +285,98 @@ const updateTenant = async (req, res) => {
     if (deposit !== undefined)       tenant.deposit = deposit;
     if (floorId)                     tenant.floorId = floorId;
 
-    // paymentStatus can be set manually only if joinedDate/fee didn't change
-    // (if they changed we already set it to 'pending' above)
-    if (paymentStatus && !joinedDateChanged && !monthlyFeeChanged) {
-      tenant.paymentStatus = paymentStatus;
+    // --- Synchronize paymentStatus, feeStatus and Payment collection ---
+    let targetPaymentStatus = undefined;
+    if (paymentStatus !== undefined) {
+      if (paymentStatus === 'paid' || paymentStatus === true || paymentStatus === 'true') {
+        targetPaymentStatus = 'paid';
+      } else if (paymentStatus === 'pending' || paymentStatus === false || paymentStatus === 'false') {
+        targetPaymentStatus = 'pending';
+      }
+    }
+
+    if (targetPaymentStatus !== undefined) {
+      // 1. paymentStatus has been explicitly changed
+      if (targetPaymentStatus === 'paid') {
+        // Mark all payments as paid
+        await Payment.updateMany(
+          { tenantId: tenant._id },
+          {
+            $set: {
+              isPaid: true,
+              paymentDate: new Date(),
+              paymentMethod: 'Cash',
+            }
+          }
+        );
+        // Mark all feeStatus entries as paid
+        tenant.feeStatus.forEach(f => {
+          f.isPaid = true;
+        });
+        tenant.paymentStatus = 'paid';
+        tenant.markModified('feeStatus');
+      } else {
+        // Mark all payments as unpaid
+        await Payment.updateMany(
+          { tenantId: tenant._id },
+          {
+            $set: {
+              isPaid: false,
+            },
+            $unset: {
+              paymentDate: "",
+              paymentMethod: "",
+            }
+          }
+        );
+        // Mark all feeStatus entries as unpaid
+        tenant.feeStatus.forEach(f => {
+          f.isPaid = false;
+        });
+        tenant.paymentStatus = 'pending';
+        tenant.markModified('feeStatus');
+      }
+    } else if (feeStatus !== undefined && Array.isArray(feeStatus)) {
+      // 2. feeStatus array has been explicitly updated directly
+      const tenantPayments = await Payment.find({ tenantId: tenant._id });
+
+      const parsedFeeStatus = feeStatus.map(f => ({
+        month: Number(f.month),
+        year: Number(f.year),
+        isPaid: f.isPaid === true || f.isPaid === 'true'
+      }));
+
+      for (const fee of parsedFeeStatus) {
+        const { month, year, isPaid } = fee;
+        // Find matching payments in-memory
+        const matchingPayments = tenantPayments.filter(p => {
+          const pStart = new Date(p.periodStart);
+          return (pStart.getMonth() + 1) === month && pStart.getFullYear() === year;
+        });
+
+        for (const p of matchingPayments) {
+          p.isPaid = isPaid;
+          if (isPaid) {
+            if (!p.paymentDate) p.paymentDate = new Date();
+            if (!p.paymentMethod) p.paymentMethod = 'Cash';
+          } else {
+            p.paymentDate = undefined;
+            p.paymentMethod = undefined;
+          }
+        }
+      }
+
+      // Save modified payments
+      await Promise.all(tenantPayments.map(p => p.save()));
+
+      // Update tenant feeStatus
+      tenant.feeStatus = parsedFeeStatus;
+      tenant.markModified('feeStatus');
+
+      // Re-evaluate overall paymentStatus
+      tenant.paymentStatus = tenant.feeStatus.length > 0 && tenant.feeStatus.every(f => f.isPaid)
+        ? 'paid'
+        : 'pending';
     }
 
     await tenant.save();

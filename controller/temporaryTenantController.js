@@ -1,4 +1,4 @@
-﻿const jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 const TemporaryTenant = require("../models/TemporaryTenant");
 const Tenant = require("../models/Tenant");
 const Hostel = require("../models/Hostel");
@@ -118,7 +118,7 @@ const approveTenant = async (req, res) => {
       deposit     = temp.deposit,
       floorId     = temp.floorId,
       roomId      = temp.roomId,
-      paymentStatus = 'pending',
+      paymentStatus = temp.paymentStatus || 'pending',
     } = req.body;
 
     // Resolve room from request body or temp record
@@ -128,20 +128,25 @@ const approveTenant = async (req, res) => {
 
     const now = new Date();
 
+    const isPaidDefault = (paymentStatus === 'paid' || paymentStatus === true || paymentStatus === 'true');
+    const actualPaymentStatus = isPaidDefault ? 'paid' : 'pending';
+
     // Build feeStatus for every calendar month from joinedDate to now
     const buildFeeStatus = (startDate) => {
       const entries = [];
       if (!startDate) {
-        return [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
+        return [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: isPaidDefault }];
       }
       const cursor = new Date(startDate);
       cursor.setDate(1);
+      cursor.setHours(0, 0, 0, 0);
       const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      endMonth.setHours(0, 0, 0, 0);
       while (cursor <= endMonth) {
-        entries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: false });
+        entries.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear(), isPaid: isPaidDefault });
         cursor.setMonth(cursor.getMonth() + 1);
       }
-      return entries.length > 0 ? entries : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }];
+      return entries.length > 0 ? entries : [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: isPaidDefault }];
     };
 
     const tenant = await Tenant.create({
@@ -158,7 +163,7 @@ const approveTenant = async (req, res) => {
       joinedDate,
       monthlyFee,
       deposit,
-      paymentStatus,
+      paymentStatus: actualPaymentStatus,
       feeStatus: buildFeeStatus(joinedDate),
     });
 
@@ -178,7 +183,16 @@ const approveTenant = async (req, res) => {
       while (cycleStart <= today) {
         const cycleEnd = new Date(cycleStart);
         cycleEnd.setDate(cycleEnd.getDate() + 30);
-        cycles.push({ hostelId: tenant.hostelId, tenantId: tenant._id, amount: tenant.monthlyFee, periodStart: new Date(cycleStart), periodEnd: new Date(cycleEnd), isPaid: false });
+        cycles.push({
+          hostelId: tenant.hostelId,
+          tenantId: tenant._id,
+          amount: tenant.monthlyFee,
+          periodStart: new Date(cycleStart),
+          periodEnd: new Date(cycleEnd),
+          isPaid: isPaidDefault,
+          paymentDate: isPaidDefault ? new Date() : undefined,
+          paymentMethod: isPaidDefault ? 'Cash' : undefined,
+        });
         cycleStart = new Date(cycleEnd);
       }
       if (cycles.length > 0) await Payment.insertMany(cycles);
