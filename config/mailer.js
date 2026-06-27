@@ -1,12 +1,7 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const getTransporter = () => nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
+const mailFrom = process.env.MAIL_FROM || process.env.MAIL_USER;
 
 const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelName, hostelOwnerName, roomNumber }) => {
   const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -80,8 +75,8 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
 </body>
 </html>`;
 
-  await getTransporter().sendMail({
-    from: `"Hostel Management" <${process.env.MAIL_USER}>`,
+  await resend.emails.send({
+    from: `"Hostel Management" <${mailFrom}>`,
     to,
     subject: `⚠️ Payment Overdue — ₹${amount} due | ${hostelName}`,
     html,
@@ -177,8 +172,8 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
 </body>
 </html>`;
 
-  await getTransporter().sendMail({
-    from: `"Hostel Management" <${process.env.MAIL_USER}>`,
+  await resend.emails.send({
+    from: `"Hostel Management" <${mailFrom}>`,
     to,
     subject: `Welcome to ${hostelName} — Your Dashboard is Ready`,
     html,
