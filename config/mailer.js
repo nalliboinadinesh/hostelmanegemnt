@@ -75,12 +75,13 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
 </body>
 </html>`;
 
-  await resend.emails.send({
+  const response = await resend.emails.send({
     from: `"Hostel Management" <${mailFrom}>`,
     to,
     subject: `⚠️ Payment Overdue — ₹${amount} due | ${hostelName}`,
     html,
   });
+  console.log('[MAIL] Resend response:', response);
 };
 
 const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, dashboardLink }) => {
@@ -172,12 +173,13 @@ const sendWelcomeEmail = async ({ to, tenantName, hostelName, hostelOwnerName, d
 </body>
 </html>`;
 
-  await resend.emails.send({
+  const response = await resend.emails.send({
     from: `"Hostel Management" <${mailFrom}>`,
     to,
     subject: `Welcome to ${hostelName} — Your Dashboard is Ready`,
     html,
   });
+  console.log('[MAIL] Resend response:', response);
 };
 
 module.exports = { sendPaymentReminder, sendWelcomeEmail };
