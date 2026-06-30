@@ -1,13 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+
+dotenv.config();
+
 const connectDB = require('./config/db');
 const startFeeStatusCron = require('./cron/feeStatusCron');
 const startPaymentReminderCron = require('./cron/paymentReminderCron');
 // BUG-14 FIX: removed healthCheckCron — it only logged to stdout every 12 min
 // and was originally meant to prevent Render free-tier sleeping. Not needed on EC2.
-
-dotenv.config();
 
 const app = express();
 

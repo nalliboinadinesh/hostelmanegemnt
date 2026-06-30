@@ -93,7 +93,8 @@ Request Body:
   "hostelName": "Green Valley Hostel",
   "hostelType": "boys",
   "ownerName": "John Doe",
-  "email": "john@example.com"
+  "email": "john@example.com",
+  "upiId": "john@oksbi"
 }
 ```
 
@@ -109,6 +110,7 @@ Response `201`:
     "hostelType": "boys",
     "ownerName": "John Doe",
     "email": "john@example.com",
+    "upiId": "john@oksbi",
     "createdAt": "2026-05-16T00:00:00.000Z",
     "updatedAt": "2026-05-16T00:00:00.000Z"
   }
@@ -150,6 +152,7 @@ Response `200`:
       "hostelType": "boys",
       "ownerName": "John Doe",
       "email": "john@example.com",
+      "upiId": "john@oksbi",
       "createdAt": "2026-05-16T00:00:00.000Z",
       "updatedAt": "2026-05-16T00:00:00.000Z"
     }
@@ -173,7 +176,8 @@ Request Body (all fields optional):
   "hostelName": "Blue Ridge Hostel",
   "hostelType": "girls",
   "ownerName": "Jane Doe",
-  "email": "jane@example.com"
+  "email": "jane@example.com",
+  "upiId": "jane@okhdfc"
 }
 ```
 
@@ -187,6 +191,7 @@ Response `200`:
     "hostelType": "girls",
     "ownerName": "Jane Doe",
     "email": "jane@example.com",
+    "upiId": "jane@okhdfc",
     "updatedAt": "2026-05-16T01:00:00.000Z"
   }
 }
@@ -238,6 +243,7 @@ Response `200`:
     "hostelType": "boys",
     "ownerName": "John Doe",
     "email": "john@example.com",
+    "upiId": "john@oksbi",
     "createdAt": "2026-05-16T00:00:00.000Z",
     "updatedAt": "2026-05-16T00:00:00.000Z"
   }

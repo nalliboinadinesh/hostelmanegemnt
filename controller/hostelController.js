@@ -111,7 +111,7 @@ const getOwnerAnalytics = async (req, res) => {
 
 const createHostel = async (req, res) => {
   try {
-    const { hostelName, hostelType, ownerName, email } = req.body;
+    const { hostelName, hostelType, ownerName, email, upiId } = req.body;
 
     if (!hostelName || !hostelType || !ownerName) {
       return res.status(400).json({ message: 'hostelName, hostelType and ownerName are required' });
@@ -124,6 +124,7 @@ const createHostel = async (req, res) => {
       hostelType,
       ownerName,
       email,
+      upiId,
     });
 
     // Mark owner as existed since hostel is now created
@@ -184,7 +185,7 @@ const deleteHostel = async (req, res) => {
 // PUT /api/hostel/:hostelId
 const updateHostel = async (req, res) => {
   try {
-    const { hostelName, hostelType, ownerName, email } = req.body;
+    const { hostelName, hostelType, ownerName, email, upiId } = req.body;
 
     const hostel = await Hostel.findOne({ _id: req.params.hostelId, ownerId: req.owner._id });
 
@@ -196,6 +197,7 @@ const updateHostel = async (req, res) => {
     if (hostelType) hostel.hostelType = hostelType;
     if (ownerName) hostel.ownerName = ownerName;
     if (email) hostel.email = email;
+    if (upiId !== undefined) hostel.upiId = upiId;
 
     await hostel.save();
 

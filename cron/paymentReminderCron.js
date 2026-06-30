@@ -78,6 +78,8 @@ const startPaymentReminderCron = () => {
 
         // Earliest unpaid cycle for due date display
         const earliest = [...cycles].sort((a, b) => new Date(a.periodStart) - new Date(b.periodStart))[0];
+        const billingMonth = new Date(earliest.periodStart).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+        const paymentLink = '#';
 
         try {
           await sendPaymentReminder({
@@ -88,6 +90,8 @@ const startPaymentReminderCron = () => {
             hostelName,
             hostelOwnerName,
             roomNumber,
+            billingMonth,
+            upiId:          hostel?.upiId || null,
           });
           sent++;
           console.log(`[REMINDER] Sent to ${tenant.email} (${tenant.name}) — ₹${totalDue} due`);

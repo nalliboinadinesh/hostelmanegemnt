@@ -100,16 +100,17 @@
 | `hostelType` | string | Yes — `"boys"`, `"girls"`, `"mixed"` |
 | `ownerName` | string | Yes |
 | `email` | string | No |
+| `upiId` | string | No |
 
 ```json
-{ "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com" }
+{ "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com", "upiId": "ravi@oksbi" }
 ```
 
 **Response `201`**
 ```json
 {
   "message": "Hostel created successfully",
-  "hostel": { "_id": "...", "ownerId": "...", "ownerNumber": "9876543210", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com" }
+  "hostel": { "_id": "...", "ownerId": "...", "ownerNumber": "9876543210", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com", "upiId": "ravi@oksbi" }
 }
 ```
 
@@ -124,7 +125,7 @@
 
 **Response `200`**
 ```json
-{ "hostels": [{ "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com" }] }
+{ "hostels": [{ "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com", "upiId": "ravi@oksbi" }] }
 ```
 
 ---
@@ -155,7 +156,7 @@
 
 **Response `200`**
 ```json
-{ "hostel": { "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com" } }
+{ "hostel": { "_id": "...", "hostelName": "Sunrise PG", "hostelType": "boys", "ownerName": "Ravi Kumar", "email": "ravi@example.com", "upiId": "ravi@oksbi" } }
 ```
 
 **Errors:** `404` not found or unauthorized
@@ -174,14 +175,15 @@
 | `hostelType` | string | `"boys"`, `"girls"`, `"mixed"` |
 | `ownerName` | string | Updated owner name |
 | `email` | string | Updated contact email |
+| `upiId` | string | Updated UPI ID |
 
 ```json
-{ "hostelName": "Sunrise PG Phase 2", "hostelType": "mixed", "email": "new@example.com" }
+{ "hostelName": "Sunrise PG Phase 2", "hostelType": "mixed", "email": "new@example.com", "upiId": "ravi@okhdfc" }
 ```
 
 **Response `200`**
 ```json
-{ "message": "Hostel updated successfully", "hostel": { "_id": "...", "hostelName": "Sunrise PG Phase 2", "hostelType": "mixed", "ownerName": "Ravi Kumar", "email": "new@example.com" } }
+{ "message": "Hostel updated successfully", "hostel": { "_id": "...", "hostelName": "Sunrise PG Phase 2", "hostelType": "mixed", "ownerName": "Ravi Kumar", "email": "new@example.com", "upiId": "ravi@okhdfc" } }
 ```
 
 **Errors:** `404` not found or unauthorized

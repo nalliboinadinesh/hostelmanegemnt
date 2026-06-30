@@ -7,6 +7,7 @@ const hostelSchema = new mongoose.Schema({
   hostelType: { type: String, required: true },
   ownerName: { type: String, required: true },
   email: { type: String },
+  upiId: { type: String },
 }, { timestamps: true, collection: 'hostels' });
 
 module.exports = mongoose.model('Hostel', hostelSchema);
