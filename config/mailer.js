@@ -7,7 +7,6 @@ const defaultFrom = normalizedMailFrom.includes('<') ? normalizedMailFrom : `"Ho
 const mailReplyTo = process.env.MAIL_REPLY_TO || normalizedMailFrom || defaultFrom;
 
 const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelName, hostelOwnerName, roomNumber, billingMonth, upiId }) => {
-  const currentYear = new Date().getFullYear();
   const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const dueDate = fmt(periodEnd);
   const amountValue = Number(amount).toFixed(2);
@@ -24,66 +23,179 @@ const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelNa
 <title>Payment Reminder</title>
 </head>
 
-<body style="margin:0;padding:20px;background:#eef2f7;font-family:Arial,Helvetica,sans-serif;color:#334155;">
-  <table width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 18px 45px rgba(15,23,42,.08);">
-          <tr>
-            <td style="background:#2563eb;padding:22px 24px;text-align:center;color:#ffffff;">
-              <h1 style="margin:0;font-size:22px;letter-spacing:0.02em;">Payment Reminder</h1>
-              <p style="margin:8px 0 0;font-size:13px;opacity:0.85;">${hostelName}</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:22px 24px;">
-              <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#475569;">
-                Hello ${tenantName},<br><br>
-                Your hostel fee payment is due. Please complete the payment by <strong>${dueDate}</strong> to avoid late charges.
-              </p>
-              <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
-                <tr>
-                  <td style="padding:18px;">
-                    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Amount due</p>
-                    <p style="margin:0;font-size:30px;font-weight:700;color:#0f172a;">₹ ${amount}</p>
-                    <p style="margin:12px 0 0;font-size:13px;color:#475569;">Due date: ${dueDate}</p>
-                  </td>
-                </tr>
-              </table>
+<body style="margin:0;padding:20px;background:#f4f6fb;font-family:Arial,sans-serif;">
 
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;font-size:14px;color:#334155;">
-                <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;">Room Number</td>
-                  <td align="right" style="padding:10px 0;border-bottom:1px solid #e2e8f0;">${roomNumber}</td>
-                </tr>
-                <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;">Billing Month</td>
-                  <td align="right" style="padding:10px 0;border-bottom:1px solid #e2e8f0;">${billingMonth}</td>
-                </tr>
-                <tr>
-                  <td style="padding:10px 0;">Hostel</td>
-                  <td align="right" style="padding:10px 0;">${hostelName}</td>
-                </tr>
-              </table>
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td align="center">
 
-              <div style="text-align:center;margin:24px 0;">
-                <a href="${paymentLink}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:600;">Pay Now</a>
-              </div>
+<table width="500" cellpadding="0" cellspacing="0"
+style="background:#fff;border-radius:18px;overflow:hidden;
+box-shadow:0 10px 30px rgba(0,0,0,.08);">
 
-              <p style="margin:0;font-size:13px;line-height:1.8;color:#64748b;">
-                If you have already completed the payment, kindly ignore this email. If you need help, contact the hostel office.
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="background:#f8fafc;padding:18px 24px;text-align:center;font-size:12px;color:#94a3b8;">
-              © ${currentYear} ${hostelName} • All rights reserved
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
+<!-- Header -->
+<tr>
+<td align="center"
+style="background:linear-gradient(135deg,#2563eb,#1d4ed8);
+padding:35px;">
+
+<div style="font-size:55px;">💳</div>
+
+<h1 style="color:white;margin:10px 0 5px;">
+Payment Reminder
+</h1>
+
+<p style="color:#dbeafe;margin:0;">
+TENORA HOSTELS
+</p>
+
+</td>
+</tr>
+
+<!-- Body -->
+<tr>
+<td style="padding:30px;">
+
+<h2 style="margin:0;color:#1e293b;">
+Hello ${tenantName},
+</h2>
+
+<p style="color:#64748b;
+line-height:25px;
+font-size:15px;">
+
+This is a friendly reminder that your hostel fee payment is due.
+Please complete the payment before the due date to avoid late charges.
+
+</p>
+
+<!-- Amount Card -->
+
+<table width="100%"
+style="margin:25px 0;
+background:#eff6ff;
+border:1px solid #bfdbfe;
+border-radius:12px;">
+
+<tr>
+
+<td align="center"
+style="padding:25px;">
+
+<p style="margin:0;color:#64748b;">
+Outstanding Amount
+</p>
+
+<h1 style="margin:10px 0;
+font-size:42px;
+color:#2563eb;">
+
+₹ ${amount}
+
+</h1>
+
+<p style="margin:0;color:#ef4444;font-weight:bold;">
+Due on ${dueDate}
+</p>
+
+</td>
+
+</tr>
+
+</table>
+
+<!-- Summary -->
+
+<table width="100%" cellpadding="10"
+style="border:1px solid #e5e7eb;
+border-radius:12px;">
+
+<tr>
+<td>🏠 Room Number</td>
+<td align="right"><b>${roomNumber}</b></td>
+</tr>
+
+<tr>
+<td>📅 Billing Month</td>
+<td align="right"><b>${billingMonth}</b></td>
+</tr>
+
+<tr>
+<td>💳 Amount Due</td>
+<td align="right"><b>₹ ${amount}</b></td>
+</tr>
+
+<tr>
+<td>⏰ Due Date</td>
+<td align="right"><b>${dueDate}</b></td>
+</tr>
+
+</table>
+
+<!-- Button -->
+
+<div style="text-align:center;margin:35px 0;">
+
+<a href="${paymentLink}"
+style="
+background:#16a34a;
+color:white;
+padding:15px 40px;
+border-radius:10px;
+text-decoration:none;
+font-size:17px;
+font-weight:bold;
+display:inline-block;
+box-shadow:0 8px 20px rgba(22,163,74,.3);">
+
+Pay Now →
+
+</a>
+
+</div>
+
+<p style="font-size:14px;color:#64748b;line-height:24px;">
+
+If you have already completed the payment, kindly ignore this email.
+For any payment-related queries, contact the hostel office.
+
+</p>
+
+<p style="margin-top:30px;color:#1e293b;">
+
+Regards,<br>
+
+<b>Finance Team</b><br>
+
+<span style="color:#2563eb;">
+TENORA HOSTELS
+</span>
+
+</p>
+
+</td>
+</tr>
+
+<!-- Footer -->
+
+<tr>
+<td align="center"
+style="padding:20px;
+background:#f8fafc;
+font-size:12px;
+color:#94a3b8;">
+
+© ${currentYear} TENORA HOSTELS • All Rights Reserved
+
+</td>
+</tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+
 </body>
 </html>`;
 
