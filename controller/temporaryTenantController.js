@@ -4,7 +4,7 @@ const Tenant = require("../models/Tenant");
 const Hostel = require("../models/Hostel");
 const Room = require("../models/Room");
 const Payment = require("../models/Payment");
-const { sendWelcomeEmail } = require("../config/mailer");
+const { sendWelcomeEmail, sendPaymentReminder } = require("../config/mailer");
 
 const buildDashboardLink = (hostelId, tenantId) => {
   const token = jwt.sign(
@@ -171,6 +171,7 @@ const approveTenant = async (req, res) => {
     room.vacantBeds -= 1;
     await room.save();
 
+    let paymentCycles = [];
     if (tenant.joinedDate && tenant.monthlyFee) {
       // skip cycle generation if joinedDate is in the future — cron handles it
       if (new Date(tenant.joinedDate) > new Date()) {
@@ -195,13 +196,37 @@ const approveTenant = async (req, res) => {
         });
         cycleStart = new Date(cycleEnd);
       }
-      if (cycles.length > 0) await Payment.insertMany(cycles);
+      if (cycles.length > 0) {
+        await Payment.insertMany(cycles);
+        paymentCycles = cycles;
+      }
     }
 
     // Delete temp record after everything is done
     await temp.deleteOne();
 
     res.status(201).json({ message: "Tenant approved and moved to tenants successfully", tenant });
+
+    if (tenant.email && !isPaidDefault && paymentCycles.length > 0) {
+      try {
+        const firstCycle = paymentCycles[0];
+        const billingMonth = new Date(firstCycle.periodStart).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+        await sendPaymentReminder({
+          to:             tenant.email,
+          tenantName:     tenant.name,
+          amount:         firstCycle.amount,
+          periodEnd:      firstCycle.periodEnd,
+          hostelName:     hostel.hostelName,
+          hostelOwnerName: hostel.ownerName,
+          roomNumber:     room.roomNumber,
+          billingMonth,
+          upiId:          hostel?.upiId || null,
+        });
+        console.log(`[MAIL] Initial payment reminder sent to ${tenant.email}`);
+      } catch (mailErr) {
+        console.error('[MAIL] Initial payment reminder failed:', mailErr.message);
+      }
+    }
 
     // send welcome email after response is sent
     if (tenant.email) {

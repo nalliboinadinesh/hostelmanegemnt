@@ -3,7 +3,7 @@ const Hostel = require('../models/Hostel');
 const Room = require('../models/Room');
 const Payment = require('../models/Payment');
 const jwt = require('jsonwebtoken');
-const { sendWelcomeEmail } = require('../config/mailer');
+const { sendWelcomeEmail, sendPaymentReminder } = require('../config/mailer');
 
 const verifyHostelOwner = async (hostelId, ownerId) => {
   return await Hostel.findOne({ _id: hostelId, ownerId });
@@ -50,6 +50,7 @@ const createTenant = async (req, res) => {
 
     const isPaidDefault = (paymentStatus === 'paid' || paymentStatus === true || paymentStatus === 'true');
     const actualPaymentStatus = isPaidDefault ? 'paid' : 'pending';
+    let paymentCycles = [];
 
     // Build feeStatus entries for every calendar month from joinedDate to now
     // so the tenant record reflects all months since they joined, not just current month
@@ -108,10 +109,35 @@ const createTenant = async (req, res) => {
         });
         cycleStart = new Date(cycleEnd);
       }
-      if (cycles.length > 0) await Payment.insertMany(cycles);
+      if (cycles.length > 0) {
+        await Payment.insertMany(cycles);
+        paymentCycles = cycles;
+      }
     }
 
     res.status(201).json({ message: 'Tenant created successfully', tenant });
+
+    // send initial reminder if tenant created with pending payment
+    if (tenant.email && !isPaidDefault && paymentCycles.length > 0) {
+      try {
+        const firstCycle = paymentCycles[0];
+        const billingMonth = new Date(firstCycle.periodStart).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+        await sendPaymentReminder({
+          to:             tenant.email,
+          tenantName:     tenant.name,
+          amount:         firstCycle.amount,
+          periodEnd:      firstCycle.periodEnd,
+          hostelName:     hostel.hostelName,
+          hostelOwnerName: hostel.ownerName,
+          roomNumber:     room.roomNumber,
+          billingMonth,
+          upiId:          hostel?.upiId || null,
+        });
+        console.log(`[MAIL] Initial payment reminder sent to ${tenant.email}`);
+      } catch (mailErr) {
+        console.error('[MAIL] Initial payment reminder failed:', mailErr.message);
+      }
+    }
 
     // send welcome email after response is sent
     if (tenant.email) {
