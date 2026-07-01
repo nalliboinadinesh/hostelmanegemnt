@@ -24,4 +24,7 @@ const temporaryTenantSchema = new mongoose.Schema({
   feeStatus: { type: [feeStatusSchema], default: [] },
 }, { timestamps: true, collection: 'temporaryTenants' });
 
+// Index — temporary tenants are listed within a hostel.
+temporaryTenantSchema.index({ hostelId: 1 });
+
 module.exports = mongoose.model('TemporaryTenant', temporaryTenantSchema);

@@ -10,4 +10,7 @@ const roomSchema = new mongoose.Schema({
   vacantBeds: { type: Number, default: 0 },
 }, { timestamps: true, collection: 'rooms' });
 
+// Indexes — rooms are always listed/looked up within a hostel (and often a floor).
+roomSchema.index({ hostelId: 1, floorId: 1 });
+
 module.exports = mongoose.model('Room', roomSchema);

@@ -1,6 +1,7 @@
 const Ticket = require('../models/Ticket');
 const Hostel = require('../models/Hostel');
 const Tenant = require('../models/Tenant');
+const { emitTicketUpdated } = require('../socket/emitters');
 
 // GET /api/tickets/hostel/:hostelId  — owner auth
 // Returns all tickets for a hostel with tenant name populated
@@ -62,6 +63,12 @@ const updateTicketStatus = async (req, res) => {
     await ticket.save();
 
     res.status(200).json({ message: 'Ticket status updated', ticket });
+
+    // Broadcast the change to the owner's other devices and the tenant's dashboard.
+    const populated = await Ticket.findById(ticket._id)
+      .populate({ path: 'tenantId', select: 'name phoneNumber roomId', populate: { path: 'roomId', select: 'roomNumber' } })
+      .lean();
+    emitTicketUpdated(ticket.hostelId, ticket.tenantId, populated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

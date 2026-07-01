@@ -5,6 +5,7 @@ const Hostel = require("../models/Hostel");
 const Room = require("../models/Room");
 const Payment = require("../models/Payment");
 const { sendWelcomeEmail } = require("../config/mailer");
+const { emitTenantJoinRequest } = require("../socket/emitters");
 
 const buildDashboardLink = (hostelId, tenantId) => {
   const token = jwt.sign(
@@ -80,6 +81,14 @@ const submitTenantForm = async (req, res) => {
       paymentStatus: "pending",
       feeStatus: [{ month: now.getMonth() + 1, year: now.getFullYear(), isPaid: false }],
     });
+
+    // Populate floor/room so the owner app can render names in the badge/list,
+    // then broadcast to the hostel's owner room for a live (no-reload) update.
+    await temporaryTenant.populate([
+      { path: "floorId", select: "floorNumber floorName" },
+      { path: "roomId", select: "roomNumber roomName roomType" },
+    ]);
+    emitTenantJoinRequest(hostelId, temporaryTenant.toObject());
 
     res.status(201).json({ message: "Form submitted successfully", temporaryTenant });
   } catch (error) { res.status(500).json({ message: error.message }); }

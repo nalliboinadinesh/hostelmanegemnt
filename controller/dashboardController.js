@@ -4,6 +4,7 @@ const Hostel = require('../models/Hostel');
 const Room = require('../models/Room');
 const Payment = require('../models/Payment');
 const Ticket = require('../models/Ticket');
+const { emitTicketCreated } = require('../socket/emitters');
 
 // Shared token verifier — reads from req.body.token
 const verifyDashboardToken = (token) => {
@@ -134,6 +135,13 @@ const createTicket = async (req, res) => {
     });
 
     res.status(201).json({ message: 'Ticket raised successfully', ticket });
+
+    // Notify the owner in real-time. Populate tenant name/room like the owner's
+    // ticket list does, so the app can render the new row without a refetch.
+    const populated = await Ticket.findById(ticket._id)
+      .populate({ path: 'tenantId', select: 'name phoneNumber roomId', populate: { path: 'roomId', select: 'roomNumber' } })
+      .lean();
+    emitTicketCreated(hostelId, populated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

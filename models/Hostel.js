@@ -10,4 +10,7 @@ const hostelSchema = new mongoose.Schema({
   upiId: { type: String },
 }, { timestamps: true, collection: 'hostels' });
 
+// Index — hostels are listed per owner, and ownership checks query { _id, ownerId }.
+hostelSchema.index({ ownerId: 1 });
+
 module.exports = mongoose.model('Hostel', hostelSchema);
