@@ -6,14 +6,17 @@ const normalizedMailFrom = mailFrom ? mailFrom.trim().replace(/^"(.*)"$/, '$1').
 const defaultFrom = normalizedMailFrom.includes('<') ? normalizedMailFrom : `"Hostel Management" <${normalizedMailFrom}>`;
 const mailReplyTo = process.env.MAIL_REPLY_TO || normalizedMailFrom || defaultFrom;
 
-const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelName, hostelOwnerName, roomNumber, billingMonth, upiId }) => {
+const sendPaymentReminder = async ({ to, tenantName, amount, periodEnd, hostelName, hostelOwnerName, roomNumber, billingMonth, upiId, paymentLink }) => {
+  const currentYear = new Date().getFullYear();
   const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const dueDate = fmt(periodEnd);
   const amountValue = Number(amount).toFixed(2);
   const note = encodeURIComponent(`Room ${roomNumber} fee for ${billingMonth}`);
-  const paymentLink = upiId
+  
+  // Prefer UPI link on mobile, fallback to dashboard payment link
+  const finalPaymentLink = upiId
     ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent('HostelMate')}&am=${amountValue}&cu=INR&tn=${note}`
-    : '#';
+    : (paymentLink || '#');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -136,7 +139,7 @@ border-radius:12px;">
 
 <div style="text-align:center;margin:35px 0;">
 
-<a href="${paymentLink}"
+<a href="${finalPaymentLink}"
 style="
 background:#16a34a;
 color:white;
@@ -199,7 +202,7 @@ color:#94a3b8;">
 </body>
 </html>`;
 
-  const text = `Hello ${tenantName},\n\nThis is a friendly reminder that your hostel fee payment is due. Please complete the payment before ${dueDate} to avoid late charges.\n\nRoom Number: ${roomNumber}\nBilling Month: ${billingMonth}\nAmount Due: ₹ ${amount}\nDue Date: ${dueDate}\n\nPay now: ${paymentLink}\n\nIf you have already completed the payment, kindly ignore this email.\n\nRegards,\nFinance Team\nTENORA HOSTELS`;
+  const text = `Hello ${tenantName},\n\nThis is a friendly reminder that your hostel fee payment is due. Please complete the payment before ${dueDate} to avoid late charges.\n\nRoom Number: ${roomNumber}\nBilling Month: ${billingMonth}\nAmount Due: ₹ ${amount}\nDue Date: ${dueDate}\n\nPay now: ${finalPaymentLink}\n\nIf you have already completed the payment, kindly ignore this email.\n\nRegards,\nFinance Team\nTENORA HOSTELS`;
 
   if (!resend) {
     console.warn('[MAIL] RESEND_API_KEY not configured; skipping payment reminder email.');
