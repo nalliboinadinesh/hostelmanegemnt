@@ -24,4 +24,8 @@ const tenantSchema = new mongoose.Schema({
   feeStatus: { type: [feeStatusSchema], default: [] },
 }, { timestamps: true, collection: 'tenants' });
 
+// Indexes — every tenant list is scoped by hostel; room lookups happen on move/delete.
+tenantSchema.index({ hostelId: 1 });
+tenantSchema.index({ roomId: 1 });
+
 module.exports = mongoose.model('Tenant', tenantSchema);

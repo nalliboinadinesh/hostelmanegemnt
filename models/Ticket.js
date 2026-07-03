@@ -10,4 +10,8 @@ const ticketSchema = new mongoose.Schema({
   status:      { type: String, enum: ['open', 'in-progress', 'resolved'], default: 'open' },
 }, { timestamps: true, collection: 'tickets' });
 
+// Indexes — tickets are listed by tenant (dashboard) and by hostel (owner view).
+ticketSchema.index({ tenantId: 1, createdAt: -1 });
+ticketSchema.index({ hostelId: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Ticket', ticketSchema);

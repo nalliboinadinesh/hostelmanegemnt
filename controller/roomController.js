@@ -3,6 +3,7 @@ const Hostel = require('../models/Hostel');
 const Floor = require('../models/Floor');
 const Tenant = require('../models/Tenant');
 const Payment = require('../models/Payment');
+const { emitTenantRemoved } = require('../socket/emitters');
 
 const verifyHostelOwner = async (hostelId, ownerId) => {
   return await Hostel.findOne({ _id: hostelId, ownerId });
@@ -166,8 +167,14 @@ const deleteRoom = async (req, res) => {
       await Tenant.deleteMany({ _id: { $in: tenantIds } });
     }
 
+    const removedHostelId = room.hostelId;
     await room.deleteOne();
     res.status(200).json({ message: 'Room and associated tenants deleted successfully' });
+
+    // Live-remove each cascaded tenant from the owner's list + force-logout them.
+    for (const id of tenantIds) {
+      emitTenantRemoved(removedHostelId, id);
+    }
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

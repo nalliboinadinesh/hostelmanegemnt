@@ -4,6 +4,7 @@ const Room = require('../models/Room');
 const Payment = require('../models/Payment');
 const jwt = require('jsonwebtoken');
 const { sendWelcomeEmail } = require('../config/mailer');
+const { emitTenantRemoved } = require('../socket/emitters');
 
 const verifyHostelOwner = async (hostelId, ownerId) => {
   return await Hostel.findOne({ _id: hostelId, ownerId });
@@ -16,7 +17,7 @@ const buildDashboardLink = (hostelId, tenantId) => {
     process.env.JWT_SECRET
     // no expiry — permanent access link
   );
-  return `https://dashboard-frontend-five-rough.vercel.app/?token=${token}`;
+  return `https://dashboard-frontend-five-rouge.vercel.app/?token=${token}`;
 };
 
 // POST /api/tenant/create
@@ -410,8 +411,13 @@ const deleteTenant = async (req, res) => {
     // delete all payment records for this tenant
     await Payment.deleteMany({ tenantId: tenant._id });
 
+    const removedHostelId = tenant.hostelId;
+    const removedTenantId = tenant._id;
     await tenant.deleteOne();
     res.status(200).json({ message: 'Tenant deleted successfully' });
+
+    // Live-update the owner's list + force-logout the removed tenant.
+    emitTenantRemoved(removedHostelId, removedTenantId);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -11,4 +11,7 @@ const expenseSchema = new mongoose.Schema({
   year: { type: Number },
 }, { timestamps: true, collection: 'expenses' });
 
+// Index — expenses are listed per hostel, commonly filtered/sorted by date.
+expenseSchema.index({ hostelId: 1, date: -1 });
+
 module.exports = mongoose.model('Expense', expenseSchema);

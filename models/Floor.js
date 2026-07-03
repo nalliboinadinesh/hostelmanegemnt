@@ -5,4 +5,7 @@ const floorSchema = new mongoose.Schema({
   floorNumber: { type: Number, required: true },
 }, { timestamps: true, collection: 'floors' });
 
+// Index — floors are always listed within a hostel.
+floorSchema.index({ hostelId: 1 });
+
 module.exports = mongoose.model('Floor', floorSchema);
